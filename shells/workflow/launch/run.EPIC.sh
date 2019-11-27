@@ -2,8 +2,8 @@
 idatName=EPIC
 prgmTag=workhorse
 
-TOP_MAC=/Users/bbarnes/Documents/Projects/${prgmTag}
-TOP_LIX=/illumina/scratch/darkmatter/Projects/${prgmTag}
+TOP_MAC=/Users/bbarnes/Documents/Projects/${prgmTag}/git/${prgmTag}
+TOP_LIX=/illumina/scratch/darkmatter/Projects/${prgmTag}/git/${prgmTag}
 
 if [ -e ${TOP_MAC} ]; then
     TOP=${TOP_MAC}
@@ -20,7 +20,7 @@ else
     exit
 fi
 
-EXE=${TOP}/shells/workflow/run.workhorse.sh
+EXE=${TOP}/shells/workflow/run.${prgmTag}.sh
 
 ${EXE} ${idatName}
 
