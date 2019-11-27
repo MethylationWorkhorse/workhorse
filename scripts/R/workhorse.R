@@ -225,6 +225,9 @@ if (args.dat[1]=='RStudio') {
                 help="Boolean to save current RDS files [default= %default]", metavar="boolean"),
     make_option(c("--overRDS"), action="store_true", default=opt$overRDS,
                 help="Boolean to overwrite previous RDS files [default= %default]", metavar="boolean"),
+
+    make_option(c("--useGRP"), action="store_true", default=opt$useGRP,
+                help="Boolean to load CpG Grouping Variables R&D Purposes Only [default= %default]", metavar="boolean"),
     make_option(c("--retSSET"), action="store_true", default=opt$retSSET,
                 help="Boolean to return SSET intermediate for debuging [default= %default]", metavar="boolean"),
     make_option(c("--retPRBS"), action="store_true", default=opt$retPRBS,
