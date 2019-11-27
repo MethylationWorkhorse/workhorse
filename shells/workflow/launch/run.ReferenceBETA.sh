@@ -2,8 +2,8 @@
 idatName=ReferenceBETA
 prgmTag=workhorse
 
-TOP_MAC=/Users/bbarnes/Documents/Projects/${prgmTag}/git/${prgmTag}-master
-TOP_LIX=/illumina/scratch/darkmatter/Projects/${prgmTag}/git/${pgrmTag}-master
+TOP_MAC=/Users/bbarnes/Documents/Projects/${prgmTag}/git/${prgmTag}
+TOP_LIX=/illumina/scratch/darkmatter/Projects/${prgmTag}/git/${pgrmTag}
 
 if [ -e ${TOP_MAC} ]; then
     TOP=${TOP_MAC}

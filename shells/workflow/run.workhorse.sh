@@ -11,8 +11,8 @@ idatName=$1
 prgmTag=workhorse
 
 # TOP_MAC=/Users/bbarnes/Documents/Projects/${prgmTag}
-TOP_MAC=/Users/bbarnes/Documents/Projects/${prgmTag}/git/workhorse-master
-TOP_LIX=/illumina/scratch/darkmatter/Projects/${prgmTag}
+TOP_MAC=/Users/bbarnes/Documents/Projects/${prgmTag}/git/${prgmTag}
+TOP_LIX=/illumina/scratch/darkmatter/Projects/${prgmTag}/git/${prgmTag}
 
 if [ -e ${TOP_MAC} ]; then
     TOP_SRC=${TOP_MAC}
@@ -21,7 +21,7 @@ if [ -e ${TOP_MAC} ]; then
     Rscript=/usr/local/bin/Rscript
 elif [ -e ${TOP_LIX} ]; then
     TOP_SRC=${TOP_LIX}
-    TOP_DIR=${TOP_LIX}
+    TOP_DIR=/illumina/scratch/darkmatter/Projects/${prgmTag}
     CONDA=conda_4.6.8
     # CONDA=Anaconda2-2019.10-Linux-x86_64
     # CONDA=Anaconda3-2019.10-Linux-x86_64
