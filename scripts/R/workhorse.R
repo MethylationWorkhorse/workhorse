@@ -32,27 +32,29 @@ opt$single     <- FALSE
 opt$parallel   <- FALSE
 opt$cluster    <- FALSE
 
-opt$writeSSheet <- TRUE
-opt$writeMIDMAN <- TRUE
+opt$writeSSheet <- FALSE
+opt$writeMIDMAN <- FALSE
 
-opt$writeMAN    <- TRUE
-opt$writeGRP    <- TRUE
-opt$writeRDS    <- TRUE
-opt$writeCSV    <- TRUE
+opt$writeMAN    <- FALSE
+opt$writeGRP    <- FALSE
+opt$writeRDS    <- FALSE
+opt$writeCSV    <- FALSE
 
 opt$loadMAN     <- FALSE
 opt$loadGRP     <- FALSE
 opt$loadRDS     <- FALSE
-opt$saveRDS     <- TRUE
-opt$overRDS     <- TRUE
+opt$saveRDS     <- FALSE
+opt$overRDS     <- FALSE
+
+opt$useGRP      <- FALSE
 
 opt$retSSET     <- FALSE
 opt$retPRBS     <- FALSE
 
-opt$Rscript <- '/usr/local/bin/Rscript'
-opt$topDir  <- '/Users/bbarnes/Documents/Projects/workhorse'
-opt$srcDir  <- '/Users/bbarnes/Documents/Projects/workhorse/scripts'
-opt$outDir  <- NULL
+opt$Rscript  <- NULL
+opt$topDir   <- NULL
+opt$srcDir   <- NULL
+opt$outDir   <- NULL
 opt$idatsDir <- NULL
 opt$funcScript <- 'workhorse_functions.R'
 opt$sampleSheet <- NULL
@@ -64,7 +66,18 @@ opt$method    <- 'both'
 opt$poobMinPval <- 0.2
 opt$negsMinPval <- 0.02
 
+opt$poobMinCutoff_Stringent <- 85
+opt$negsMinCutoff_Stringent <- 98
+
+opt$poobMinCutoff_Relaxed <- 80
+opt$negsMinCutoff_Relaxed <- 96
+
+
 opt$verbosity <- 3
+
+# QC Variable
+tarSample <- NULL
+prgmPath  <- NULL
 
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 #                                 Starting::
@@ -77,23 +90,29 @@ cat(glue::glue("[{opt$prgmTag}]: Starting(time={ctime})"),"\n\n",sep='')
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 args.dat <- commandArgs(trailingOnly = FALSE)
 if (args.dat[1]=='RStudio') {
+  opt$Rscript <- '/usr/local/bin/Rscript'
+  opt$topDir  <- '/Users/bbarnes/Documents/Projects/workhorse'
+  opt$srcDir  <- '/Users/bbarnes/Documents/Projects/workhorse/git/workhorse-master/scripts'
   prgmPath <- file.path(opt$srcDir, 'R', paste0(opt$prgmTag,'.R'))
   stopifnot(file.exists(prgmPath))
   
   opt$runMode  <- args.dat[1]
-  opt$topDir   <- dirname(opt$srcDir)
   opt$outDir   <- file.path(opt$topDir, 'workspace', opt$prgmTag)
   opt$idatsDir <- file.path(opt$topDir, 'idats')
   
   # opt$platform  <- 'NZT'
   opt$platform  <- 'EPIC-B4'
   if (opt$platform=='EPIC-B4') {
-    opt$idatsDir  <- file.path(opt$topDir, 'idats', 'DeltaBetaCore')
-    
-    # opt$idatsDir  <- file.path(opt$topDir, 'idats', 'DeltaBetaCore','202761400009')
-    tarSample <- '202761400009_R07C01'  # M
-    tarSample <- '202761400009_R06C01'  # H
-    tarSample <- '202761400009_R05C01'  # U
+    opt$idatsDir  <- file.path(opt$topDir, 'idats', 'Open-ReferenceBETA')
+    opt$idatsDir  <- file.path(opt$topDir, 'idats', 'ReferenceBETA')
+    opt$idatsDir  <- file.path(opt$topDir, 'idats', 'ReferenceBETA', '201502830033')
+
+    # tarSample <- '202761400009_R07C01'  # M
+    # tarSample <- '202761400009_R06C01'  # H
+    # tarSample <- '202761400009_R05C01'  # U
+    # tarSample <- '203452220015_R06C01'  # H miscalled U, but with 842126 CpGs instead of full 862927
+    opt$outDir <- file.path(opt$outDir, 'testing')
+    # opt$verbosity <- 10
   } else if (opt$platform=='NZT') {
     opt$idatsDir  <- file.path(opt$topDir, 'idats', 'NZT')
   } else {
@@ -101,7 +120,7 @@ if (args.dat[1]=='RStudio') {
   }
   
   opt$autoDetect <- TRUE
-  opt$single     <- FALSE
+  opt$single     <- TRUE
   opt$parallel   <- FALSE
   opt$cluster    <- FALSE
 
@@ -109,13 +128,15 @@ if (args.dat[1]=='RStudio') {
   opt$writeMIDMAN <- FALSE
   
   opt$writeMAN    <- FALSE
+  opt$writeGRP    <- FALSE
   opt$writeRDS    <- TRUE
   opt$writeCSV    <- FALSE
   
   opt$loadMAN     <- TRUE
+  opt$loadGRP     <- FALSE
   opt$loadRDS     <- TRUE
   opt$saveRDS     <- TRUE
-  opt$overRDS     <- TRUE
+  opt$overRDS     <- FALSE
   
   opt$retSSET     <- FALSE
   opt$retPRBS     <- FALSE
@@ -126,7 +147,7 @@ if (args.dat[1]=='RStudio') {
   opt$runMode <- 'CommandLine'
   opt$prgmTag <- sub('\\.R$', '', basename(substring(args.dat[grep("--file=", args.dat)], 8)))
   opt$srcDir  <- dirname(normalizePath(dirname(substring(args.dat[grep("--file=", args.dat)], 8)) ))
-  opt$topDir  <- dirname(opt$srcDir)
+  # opt$topDir  <- dirname(opt$srcDir)
   
   args.dat <- commandArgs(trailingOnly = TRUE)
   option_list = list(
@@ -155,17 +176,27 @@ if (args.dat[1]=='RStudio') {
     
     # Platform/Method Parameters::
     make_option(c("--platform"), type="character", default=opt$platform, 
-                help="platform to use for analysis [default= %default]", metavar="character"),
+                help="Platform to use for analysis [default= %default]", metavar="character"),
     make_option(c("--build"), type="character", default=opt$build, 
-                help="genome build to use for analysis [default= %default]", metavar="character"),
+                help="Genome build to use for analysis [default= %default]", metavar="character"),
     make_option(c("--method"), type="character", default=opt$method, 
-                help="method to use for analysis [default= %default]", metavar="character"),
+                help="Method to use for analysis [default= %default]", metavar="character"),
     
     # Detection Parameters::
     make_option(c("--poobMinPval"), type="double", default=opt$poobMinPval, 
-                help="detection p-value filter for poob controls [default= %default]", metavar="double"),
+                help="Detection p-value filter for poob controls [default= %default]", metavar="double"),
     make_option(c("--negsMinPval"), type="double", default=opt$negsMinPval, 
-                help="detection p-value filter for negative controls [default= %default]", metavar="double"),
+                help="Detection p-value filter for negative controls [default= %default]", metavar="double"),
+    
+    make_option(c("--poobMinCutoff_Stringent"), type="double", default=opt$poobMinCutoff_Stringent, 
+                help="Stringent detection p-value threshold percent for poob controls [default= %default]", metavar="double"),
+    make_option(c("--negsMinCutoff_Stringent"), type="double", default=opt$negsMinCutoff_Stringent, 
+                help="Stringent detection p-value threshold percent for negative controls [default= %default]", metavar="double"),
+    
+    make_option(c("--poobMinCutoff_Relaxed"), type="double", default=opt$poobMinCutoff_Relaxed, 
+                help="Relaxed detection p-value threshold percent for poob controls [default= %default]", metavar="double"),
+    make_option(c("--negsMinCutoff_Relaxed"), type="double", default=opt$negsMinCutoff_Relaxed, 
+                help="Relaxed detection p-value threshold percent for negative controls [default= %default]", metavar="double"),
     
     # Boolean Variables::
     make_option(c("--autoDetect"), action="store_true", default=opt$autoDetect,
@@ -252,9 +283,18 @@ if (opt$verbosity>2) {
   print(opt.tib)
 }
 source(opt$funcScript)
-opt$topDir <- dirname(opt$srcDir)
 opt$datDir <- file.path(opt$topDir, 'dat')
-if (!dir.exists(opt$datDir)) dir.create(opt$topDir, recursive=TRUE)
+if (!dir.exists(opt$datDir)) {
+  stop(glue::glue("[{opt$prgmTag}]: Critical ERROR: datDir={datDir} does not exist!"),"\n", sep='')
+  q()
+}
+
+# ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
+#                                  Begin::
+# ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
+
+sysTime <- Sys.time()
+cat(glue::glue("[{opt$prgmTag}]: Begin(time={sysTime})"),"\n\n",sep='')
 
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 #                              Sample Sheet::
@@ -338,6 +378,7 @@ if (opt$cluster) {
   }
   
 } else {
+  
   # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
   #                              Preprocessing::
   # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
@@ -362,13 +403,6 @@ if (opt$cluster) {
       file.exists(man.add.rds) &&
       file.exists(man.add.csv)) {
     
-    cat(glue::glue("[{opt$prgmTag}]: Found all four CSV/RDS Manifests(opt$platform)."),"\n", sep='')
-    
-    if (file.exists(man.grp.rds)) {
-      cat(glue::glue("[{opt$prgmTag}]: Loading Sesame Grouped Manifest({opt$platform}) RDS(CPG)={man.grp.rds}"),"\n", sep='')
-      man.grp.tib <- readr::read_rds(man.grp.rds)
-    }
-    
     cat(glue::glue("[{opt$prgmTag}]: Loading Sesame Manifest({opt$platform}) RDS(CPG)={man.cpg.rds}"),"\n", sep='')
     man.cpg.tib <- readr::read_rds(man.cpg.rds)
     cat(glue::glue("[{opt$prgmTag}]: Loading Sesame Manifest({opt$platform}) RDS(ADD)={man.add.rds}"),"\n", sep='')
@@ -383,7 +417,6 @@ if (opt$cluster) {
       stop("\n[Warning]: Not supported for standard manifests yet, platform =",opt$platform,"!!!\n\n")
     } else if (opt$platform=='EPIC-B4') {
       man.cpg.tib <- sesameManifest(platform='EPIC', build=opt$build, verbose=opt$verbosity)
-      man.grp.tib <- addManifestGroups(platform='EPIC', build=opt$build, manCPG=man.cpg.tib, verbose=opt$verbosity)
       man.add.tib <- man.cpg.tib %>% dplyr::arrange(U)
     } else if (opt$platform=='NZT') {
       # epic.ctl.csv <- file.path(opt$topDir, 'dat/ctl/EPIC-B0.controls.sesame.csv.gz')
@@ -397,28 +430,53 @@ if (opt$cluster) {
       stop("\n\nERROR UNSUPPORTED PLATFORM 3!!!\n\n")
     }
   }
-  
+
+  # Seperate Case for Loading Grouped Manifest::
+  if (opt$loadGRP &&
+      file.exists(man.grp.rds)) {
+    cat(glue::glue("[{opt$prgmTag}]: Loading Sesame Grouped Manifest({opt$platform}) RDS(CPG)={man.grp.rds}"),"\n", sep='')
+    man.grp.tib <- readr::read_rds(man.grp.rds)
+  } else {
+    if (opt$useGRP) man.grp.tib <- addManifestGroups(platform='EPIC', build=opt$build, manCPG=man.cpg.tib, verbose=opt$verbosity)
+  }
+
   if (opt$writeMAN) {
     cat(glue::glue("[{opt$prgmTag}]: Writing CSV/RDS Manifests datDir={opt$datDir}"),"\n", sep='')
     readr::write_csv(man.cpg.tib, man.cpg.csv)
     readr::write_rds(man.cpg.tib, man.cpg.rds, compress='gz')
     readr::write_csv(man.add.tib, man.add.csv)
     readr::write_rds(man.add.tib, man.add.rds, compress='gz')
+    cat(glue::glue("[{opt$prgmTag}]: Done writing CSV/RDS Manifests"),"\n\n", sep='')
+  }
+  if (opt$writeGRP) {
     if (!is.null(man.grp.tib)) {
       cat(glue::glue("[{opt$prgmTag}]: Writing CSV/RDS Grouped Manifests datDir={opt$datDir}"),"\n", sep='')
       readr::write_csv(man.grp.tib, man.grp.csv)
       readr::write_rds(man.grp.tib, man.grp.rds, compress='gz')
+      cat(glue::glue("[{opt$prgmTag}]: Done writing CSV/RDS Grouped Manifests"),"\n\n", sep='')
     }
-    cat(glue::glue("[{opt$prgmTag}]: Done writing CSV/RDS Manifests"),"\n\n", sep='')
   }
   
   # Load data for auto detect
-  ref.sam.tib <- NULL
+  #
+  # TBD: Replace ref.sam.tib with::
+  #  - can.tib[[decoder]] => Canonical Reference
+  #  - ref.tib[[decoder]] => Sample Reference
+  can.tib <- NULL
+  ref.tib <- NULL
+  # ref.sam.tib <- NULL
   if (opt$autoDetect) {
-    ref.rds <- file.path(opt$topDir, 'dat/ref/Reference_betasMvals_Pval0.02.rds')
-    cat(glue::glue("[{opt$prgmTag}]: Loading Reference RDS={ref.rds}"),"\n", sep='')
-    ref.sam.tib <- readr::read_rds(ref.rds)
-    cat(glue::glue("[{opt$prgmTag}]: Loaded Reference Samples"),"\n\n", sep='')
+    Pools <- c('BETA', 'DELTA')
+    for (pool in Pools) {
+      can.rds <- file.path(opt$topDir, 'dat/ref', paste0('Canontcal_',pool,'_Betas-Mvals.rds'))
+      ref.rds <- file.path(opt$topDir, 'dat/ref', paste0('Reference_',pool,'_Betas-Mvals.rds'))
+      
+      cat(glue::glue("[{opt$prgmTag}]: Loading Canonical({pool}) RDS={can.rds}"),"\n", sep='')
+      can.tib[[pool]] <- readr::read_rds(can.rds)
+      cat(glue::glue("[{opt$prgmTag}]: Loading Reference({pool}) RDS={ref.rds}"),"\n", sep='')
+      ref.tib[[pool]] <- readr::read_rds(ref.rds)
+      cat(glue::glue("[{opt$prgmTag}]: Loaded both Canonical/Reference({pool}) Samples for Auto-Detect!"),"\n\n", sep='')
+    }
   }
   
   # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
@@ -434,7 +492,8 @@ if (opt$cluster) {
                                      man.cpg = man.cpg.tib,
                                      man.add = man.add.tib,
                                      man.ses = NULL,
-                                     ref.tib = ref.sam.tib,
+                                     can.tib = can.tib,
+                                     ref.tib = ref.tib,
                                      ctl.tib = NULL,
                                      vt=1)
       ss.ret
@@ -442,16 +501,18 @@ if (opt$cluster) {
   } else {
     cat(glue::glue("[{opt$prgmName}]: Will use single-core linear processing..."),"\n", sep='')
     for (prefix in names(chipPrefixes)) {
-      # if (!is.null(tarSample) && prefix!=tarSample) next
+      if (!is.null(tarSample) && prefix!=tarSample) next
       
       ss.ret <- singleSampleWorkflow(prefix=chipPrefixes[[prefix]],
                                      opt=opt,
                                      man.cpg = man.cpg.tib,
                                      man.add = man.add.tib,
                                      man.ses = NULL,
-                                     ref.tib = ref.sam.tib,
+                                     can.tib = can.tib,
+                                     ref.tib = ref.tib,
                                      ctl.tib = NULL,
                                      vt=1)
+      
       ssheets[[prefix]] <- ss.ret
       if (opt$single) break
     }
@@ -461,7 +522,7 @@ if (opt$cluster) {
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 #                                Finished::
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-ctime <- Sys.time()
-cat(glue::glue("[{opt$prgmTag}]: Finished(time={ctime})"),"\n\n",sep='')
+sysTime <- Sys.time()
+cat(glue::glue("[{opt$prgmTag}]: Finished(time={sysTime})"),"\n\n",sep='')
 
 # End of file

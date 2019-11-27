@@ -18,6 +18,7 @@ singleSampleWorkflow = function(prefix,
                                 man.cpg, 
                                 man.add,
                                 man.ses=NULL, 
+                                can.tib=NULL, 
                                 ref.tib=NULL, 
                                 ctl.tib=NULL, 
                                 vt=1) {
@@ -54,8 +55,8 @@ singleSampleWorkflow = function(prefix,
   # if (is.null(man.ses) || !opt$cleanManifest)
   #   man.ses <- getManifest(man.add, idat.list$tib, verbose=verbose)
   #   man.ses <- getManifest(man.cpg, idat.list$tib, verbose=verbose)
-  man.ses <- getManifest(man.add, idat.list$tib, verbose=verbose)
-  stopifnot(length(man.ses)>0)
+  if (is.null(man.ses)) man.ses <- getManifest(man.add, idat.list$tib, verbose=verbose)
+  stopifnot(!is.null(man.ses), length(man.ses)>0)
   if (opt$writeMIDMAN) {
     cat(glue::glue("[{funcTag}]:{TAB} Writing Sample-Mid-Manifest={opt$man_CSV}"),"\n", sep='')
     readr::write_csv(man.ses, opt$man_CSV)
@@ -66,7 +67,8 @@ singleSampleWorkflow = function(prefix,
   # ssets <- fetchSSet(prefix, platform='custom', manifest=man.add, method=opt$method, desplat=opt$platform,
   #                    ssetRDS=opt$sset_RDS, loadRDS=opt$loadRDS, saveRDS=opt$saveRDS, overRDS=opt$overRDS,
   #                    verbose=verbose)
-  ssets <- fetchSSet(prefix, platform='custom', manifest=man.add, method=opt$method, desplat=opt$platform,
+  # ssets <- fetchSSet(prefix, platform='custom', manifest=man.add, method=opt$method, desplat=opt$platform,
+  ssets <- fetchSSet(prefix, platform='custom', manifest=man.ses, method=opt$method, desplat=opt$platform,
                      ssetRDS=opt$sset_RDS, loadRDS=opt$loadRDS, saveRDS=opt$saveRDS, overRDS=opt$overRDS,
                      verbose=verbose)
   
@@ -80,7 +82,7 @@ singleSampleWorkflow = function(prefix,
   
   if (is.null(ctl.tib))
     ctl.tib <- man.add %>% dplyr::filter(stringr::str_starts(Probe_ID, 'ctl')) %>% dplyr::select(Probe_ID, Probe_Type)
-  if (verbose>=vt) cat("\t", glue::glue("[{funcTag}]: Extracted Control Probes"),"\n", sep='')
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB} Extracted Control Probes"),"\n", sep='')
   
   # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
   #                          Auto Sample Detection::
@@ -92,24 +94,61 @@ singleSampleWorkflow = function(prefix,
                      Auto_Sample_R2_Key='Unknown',
                      Auto_Sample_R2_Val=NA)
   
+  auto.tib <- tibble(sam.ref=5,
+                     'Auto_Sample_BETA_bDB_Key'='Uknown',
+                     'Auto_Sample_BETA_bDB_Val'=NA,
+                     'Auto_Sample_DELTA_bDB_Key'='Uknown',
+                     'Auto_Sample_DELTA_bDB_Val'=NA,
+                     
+                     'Auto_Sample_BETA_mR2_Key'='Unknown',
+                     'Auto_Sample_BETA_mR2_Val'=NA,
+                     'Auto_Sample_DELTA_mR2_Key'='Unknown',
+                     'Auto_Sample_DELTA_mR2_Val'=NA
+                     )
+  
+  prbsI  <- prbs$I  %>% dplyr::select(Probe_ID, Probe_Type, Beta, Mval, NegsDetP, PoobDetP, Swapped)
+  prbsII <- prbs$II %>% dplyr::select(Probe_ID, Probe_Type, Beta, Mval, NegsDetP, PoobDetP) %>%
+    dplyr::mutate(Swapped=NA)
+  sam <- dplyr::bind_rows(prbsI, prbsII) %>% dplyr::arrange(Probe_ID)
+  detP_sum <- sam %>% dplyr::summarise(Total_Count_CG=n(), 
+                                       PassDetpNegs_Count_CG=count(NegsDetP<opt$negsMinPval), 
+                                       PassDetpNegs_Percent_CG=round(100*PassDetpNegs_Count_CG/Total_Count_CG,3),
+                                       PassDetpPoob_Count_CG=count(PoobDetP<opt$poobMinPval), 
+                                       PassDetpPoob_Percent_CG=round(100*PassDetpPoob_Count_CG/Total_Count_CG,3),
+                                       SwappedCount_CG=count(!is.na(Swapped)),
+                                       Sample_Pass_Stringent=case_when(
+                                         PassDetpNegs_Percent_CG < opt$negsMinCutoff_Stringent ~ FALSE,
+                                         TRUE ~ TRUE
+                                       ),
+                                       Sample_Pass_Relaxed=case_when(
+                                         PassDetpNegs_Percent_CG < opt$negsMinCutoff_Stringent ~ FALSE,
+                                         TRUE ~ TRUE
+                                       ))
+  if (verbose>=vt+5) print(detP_sum)
+  
   if (opt$autoDetect && !is.null(ref.tib)) {
-    if (verbose>=vt) cat("\t", glue::glue("[{funcTag}]: Starting Auto Sample Detection..."),"\n", sep='')
-    # New method that selects common columns before binding row::
-    prbsI  <- prbs$I  %>% dplyr::select(Probe_ID, Probe_Type, Beta, Mval, NegsDetP, PoobDetP)
-    prbsII <- prbs$II %>% dplyr::select(Probe_ID, Probe_Type, Beta, Mval, NegsDetP, PoobDetP)
-    sam <- dplyr::bind_rows(prbsI, prbsII) %>% dplyr::arrange(Probe_ID)
-    
+    if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB} Starting Auto Sample Detection..."),"\n", sep='')
     # Specail Case for NZT Pool::
     #
     if (opt$platform=='NZT')
       sam <- sam %>% dplyr::filter(str_detect(Probe_ID, '_C_I')) %>% 
-      dplyr::mutate(Probe_ID=str_remove(Probe_ID, '_[FR].*$'))
+        dplyr::mutate(Probe_ID=str_remove(Probe_ID, '_[FR].*$'))
+    if (verbose>=vt+5) print(sam)
     
-    auto.tib <- predictAutoSample(sam=sam, ref=ref.tib, minPval=opt$negsMinPval, minDelta=0.2, verbose=verbose)
-    if (verbose>=vt) cat("\t", glue::glue("[{funcTag}]: Detected Auto Samples(DB)={auto.tib$Auto_Sample_DB_Key}..."),"\n", sep='')
-    
-    if (verbose>=vt+4) print(auto.tib)
+    # 1. Detect Auto-Samples::
+    auto.tib <- predictAutoSample(sam=sam, ref=can.tib, minPval=opt$negsMinPval, minDelta=0.2, verbose=verbose)
+    if (verbose>=vt+5) print(auto.tib)
     # return(auto.tib)
+    
+    if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB} Detected Auto Samples(DB)={auto.tib$Auto_Sample_BETA_bDB_Key}..."),"\n", sep='')
+    if (verbose>=vt+5) print(auto.tib)
+    
+    # 2. Upload Reference Samples::
+    # return(auto.tib)
+    
+    
+    # 3. Generate R2/DB Reference Comparison Stats::
+    
   }
   
   # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
@@ -118,26 +157,41 @@ singleSampleWorkflow = function(prefix,
   
   # Write merged sample::
   if (opt$writeRDS) {
-    if (verbose>=vt) cat("\t", glue::glue("[{funcTag}]: Writing Probe RDS={opt$prbs_RDS}"),"\n", sep='')
+    if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB} Writing Probe RDS={opt$prbs_RDS}"),"\n", sep='')
     readr::write_rds(prbs, opt$prbs_RDS, compress="gz")
   }
   if (opt$writeCSV) {
-    if (verbose>=vt) cat("\t", glue::glue("[{funcTag}]: Writing Probe(I) CSV={opt$prbs1_CSV}"),"\n", sep='')
+    if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB} Writing Probe(I) CSV={opt$prbs1_CSV}"),"\n", sep='')
     readr::write_csv(prbs$I,  opt$prbs1_CSV)
-    if (verbose>=vt) cat("\t", glue::glue("[{funcTag}]: Writing Probe(II) CSV={opt$prbs2_CSV}"),"\n", sep='')
+    if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB} Writing Probe(II) CSV={opt$prbs2_CSV}"),"\n", sep='')
     readr::write_csv(prbs$II, opt$prbs2_CSV)
   }
+  
+  # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
+  #                      Bisulfite Conversion (GCT Score)::
+  # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
+  GCT <- -1
+  GCT = tryCatch({
+    sesame::bisConversionControl(ssets$base)
+  }, warning = function(w) {
+    'warning-GCT'
+  }, error = function(e) {
+    'error-GCT'
+  }, finally = {
+    'cleanup-GCT'
+  })
   
   # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
   #                   Auto Sample Sheet/Summary Generation::
   # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
   
-  if (verbose>=vt) cat("\t", glue::glue("[{funcTag}]: Building Sample Sheet/Summary Stats..."),"\n", sep='')
-  prbs.sum <- summarizePrbs(prbs=prbs, ctl=ctl.tib, 
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB} Building Sample Sheet/Summary Stats..."),"\n", sep='')
+  prbs.sum <- NULL
+  prbs.sum <- summarizePrbs(prbs=prbs, ctl=ctl.tib,
                             negsMin=opt$negsMinPval, poobMin=opt$poobMinPval, verbose=verbose)
-  if (verbose>=vt+4) print(prbs.sum)
+  if (verbose>=vt+5) print(prbs.sum)
   
-  if (verbose>=vt) cat("\t", glue::glue("[{funcTag}]: {TAB}Building core.sum..."),"\n", sep='')
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB}{TAB} Building core.sum..."),"\n", sep='')
   core.lst <- NULL
   core.lst$analysisPlatform <- opt$platform
   core.lst$Sentrix_Name <- idat.list$Sentrix_Name
@@ -148,20 +202,22 @@ singleSampleWorkflow = function(prefix,
   core.lst$ChipType     <- idat.list$ChipType
   core.lst$ChipFormat   <- idat.list$ChipFormat
   core.sum <- dplyr::bind_rows(core.lst)
-  if (verbose>=vt+4) print(core.sum)
+  if (verbose>=vt+5) print(core.sum)
   
-  if (verbose>=vt) cat("\t", glue::glue("[{funcTag}]: {TAB}Merging Summaries..."),"\n", sep='')
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB}{TAB} Merging Summaries..."),"\n", sep='')
   sam.ss <- core.sum %>%
     dplyr::bind_cols(auto.tib) %>%
     # dplyr::bind_cols(phen) %>%
     # dplyr::bind_cols(ages) %>%
+    dplyr::bind_cols(detP_sum) %>%
     dplyr::bind_cols(prbs.sum) %>%
+    dplyr::mutate(GCT=GCT) %>%
     dplyr::mutate_if(is.numeric, list(round), 6)
-  if (verbose>=vt+4) print(sam.ss)
+  if (verbose>=vt+5) print(sam.ss)
   
   if (opt$writeSSheet) {
     if (verbose>=vt)
-      cat("\t", glue::glue("[{funcTag}]: Writing Auto Sample Sheet CSV={opt$outCsv}"),"\n", sep='')
+      cat(glue::glue("[{funcTag}]:{TAB} Writing Auto Sample Sheet CSV={opt$outCsv}"),"\n", sep='')
     readr::write_csv(sam.ss, opt$ss_CSV)
   }
   if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB} Finished."),"\n\n", sep='')
@@ -173,9 +229,9 @@ singleSampleWorkflow = function(prefix,
 #                         Auto Sample Functions ::
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 
-firstVsRestDelta = function(mat, minDelta=0.2, verbose=0, vt=5) {
+firstVsRestDelta = function(mat, method, minDelta=0.2, verbose=0, vt=5) {
   funcTag <- 'firstVsRestDelta'
-  if (verbose>=vt) cat("\t",glue::glue("[{funcTag}]: {TAB}Starting..."),"\n", sep='')
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB}{TAB} Starting({method})..."),"\n", sep='')
   
   ncols  <- base::ncol(mat)
   nrows  <- base::nrow(mat)
@@ -188,108 +244,120 @@ firstVsRestDelta = function(mat, minDelta=0.2, verbose=0, vt=5) {
   max_per <- 0
   max_key <- 'Unknown'
   for (i in c(2:ncols)) {
-    cur_cnt <- length(which(rowDiffs(mat[,c(1,i)]) <= minDelta))
-    if (verbose>=vt) cat("\t",glue::glue("[{funcTag}]: i={i}, matchCnt={cur_cnt}"),"\n", sep='')
+    cur_cnt <- length(which(abs(rowDiffs(mat[,c(1,i)])) <= minDelta))
+    # cur_cnt <- length(which(rowDiffs(mat[,c(1,i)]) <= minDelta))
+    # cur_cnt <- length(which(rowDiffs(na.omit(mat[,c(1,i)])) <= minDelta))
+    if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB}{TAB}{TAB} i={i}, matchCnt={cur_cnt}"),"\n", sep='')
     if (cur_cnt > max_cnt) {
       max_cnt <- cur_cnt
       max_idx <- i
-      if (verbose>=vt) cat("\t",glue::glue("[{funcTag}]: {TAB}{TAB} maxCnt={max_cnt}, maxIdx={max_idx}"),"\n", sep='')
+      if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB}{TAB}{TAB} maxCnt={max_cnt}, maxIdx={max_idx}"),"\n", sep='')
     }
   }
   if (max_idx != 0) max_key <- cnames[max_idx]
   max_per <- round(100*max_cnt/nrows, 3)
   
-  mtib <- tibble("Auto_Sample_DB_Key" = max_key,
-                 "Auto_Sample_DB_Val" = max_per)
-  if (verbose>=vt) cat("\t",glue::glue("[{funcTag}]: {TAB}Finished."),"\n\n", sep='')
+  keyName <- paste0('Auto_Sample_',method,'_bDB_Key')
+  valName <- paste0('Auto_Sample_',method,'_bDB_Val')
+  mtib <- tibble(!!keyName := max_key,
+                 !!valName := max_per)
+  # mtib <- tibble("Auto_Sample_DB_Key" = max_key,
+  #                "Auto_Sample_DB_Val" = max_per)
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB}{TAB} Finished."),"\n\n", sep='')
   
   mtib
 }
 
 predictAutoSample = function(sam, ref, minPval=0.02, minDelta=0.2, verbose=0, vt=5) {
   funcTag <- 'predictAutoSample'
-  if (verbose>=vt) cat("\t",glue::glue("[{funcTag}]: {TAB}Starting..."),"\n", sep='')
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB} Starting..."),"\n", sep='')
   
-  # cmpTypes <- c('Beta_base', 'Beta_swap', 'Mval_base', 'Mval_swap')
-  # probeTypes <- c('cg', 'rs', 'ch')
+  sbb_tib <- sam %>% dplyr::select(Probe_ID, Beta) %>%
+    dplyr::left_join(ref[['BETA']]$Beta, by="Probe_ID")
+  sbm_tib <- sam %>% dplyr::select(Probe_ID, Mval) %>%
+    dplyr::left_join(ref[['BETA']]$Mval, by="Probe_ID")
   
-  # cmpTypes <- c('Beta_base')
-  cmpTypes <- c('Beta')
-  probeTypes <- c('cg')
+  sdb_tib <- sam %>% dplyr::select(Probe_ID, Beta) %>%
+    dplyr::left_join(ref[['DELTA']]$Beta, by="Probe_ID")
+  sdm_tib <- sam %>% dplyr::select(Probe_ID, Mval) %>%
+    dplyr::left_join(ref[['DELTA']]$Mval, by="Probe_ID")
   
-  sam.split <- sam %>% split(.$Probe_Type)
+  sbb_mat <- sbb_tib %>% dplyr::select(-Probe_ID) %>% as.matrix()
+  sdb_mat <- sdb_tib %>% dplyr::select(-Probe_ID) %>% as.matrix()
   
-  # Delta Mval(swap)
-  # R2 Mval(swap)
-  cur.merge.dat <- NULL
-  for (pt in probeTypes) {
-    if (length(sam.split[[pt]])==0 || length(ref[[pt]])==0) {
-      if (opt$verbosity>=vt) cat("\t", glue::glue("[{funcTag}]: Skipping Auto Detect for probeType={pt}..."),"\n", sep='')
-      next
-    }
-    
-    # Remove poor performing detection p-values using the min(NEGs between base/swap)
-    #  sam.split[[pt]] %>% dplyr::select(Probe_ID,starts_with("Beta"),starts_with("Mval"))
-    #  sam.split[[pt]] %>% dplyr::select(contains("NegsDetP_base")) 
-    
-    # Remove Poorly Detected Probes based on Negs DetP for now::
-    #  Below is the old method with all options::
-    #  - baseFailNegs_idx <- which(sam.split[[pt]]$NegsDetP_base > minPval)
-    baseFailNegs_idx <- which(sam.split[[pt]]$NegsDetP > minPval)
-    
-    atib <- NULL
-    dtib <- NULL
-    rtib <- NULL
-    for (cmpType in cmpTypes) {
-      sdat <- sam.split[[pt]] %>% dplyr::select(Probe_ID,starts_with(cmpType))
-      sdat[[cmpType]][baseFailNegs_idx] <- NA
-      
-      # Get Betas For Reference::
-      rdat <- ref[[pt]] %>% select(Probe_ID, ends_with(cmpType))
-      
-      sr_mat <- sdat %>% dplyr::left_join(rdat, by="Probe_ID") %>% 
-        dplyr::select(-Probe_ID) %>% as.matrix()
-      
-      # Get Delta Beta::
-      dtib <- firstVsRestDelta(sr_mat, verbose=verbose, vt=vt)
-      
-      # Get R-Squared::
-      sr_cor <- NULL
-      sr_cor = tryCatch({
-        cor(sr_mat, method="pearson", use="pairwise.complete.obs")
-      }, warning = function(w) {
-        'warning-Cor'
-      }, error = function(e) {
-        'error-Cor'
-      }, finally = {
-        'cleanup-Cor'
-      })
-      # sr_cor <- cor(sr_mat, method="pearson", use="pairwise.complete.obs")
-      
-      mkey <- NA
-      mval <- NA
-      
-      if (!is.null(sr_cor)) {
-        if (verbose>=vt) print(sr_cor[1,])
-        ncols <- length(sr_cor[1,])
-        mval <- max(sr_cor[1,2:ncols])
-        midx <- which(sr_cor[1,2:ncols]==mval)
-        mkey <- names(sr_cor[1,2:ncols])[midx]
-        mval <- round(max(sr_cor[1,2:ncols]),6)
-        
-        if (verbose>=vt) {
-          cat("\tmval=",mval,"\n", sep='')
-          cat("\tmidx=",midx,"\n", sep='')
-          cat("\tmkey=",mkey,"\n", sep='')
-        }
-      }
-      rtib <- tibble("Auto_Sample_R2_Key" = mkey,
-                     "Auto_Sample_R2_Val" = mval)
-      
-      atib <- dplyr::bind_cols(dtib, rtib)
-    }
+  sbm_mat <- sbm_tib %>% dplyr::select(-Probe_ID) %>% as.matrix()
+  sdm_mat <- sdm_tib %>% dplyr::select(-Probe_ID) %>% as.matrix()
+  
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB}{TAB} Begs(sbTib)::"),"\n", sep='')
+  if (verbose>=vt) print(sbb_tib)
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB}{TAB} Done(sbTib)..."),"\n\n", sep='')
+  
+  # Get Delta Beta::BETA
+  dbb_tib <- firstVsRestDelta(sbb_mat, method='BETA', verbose=verbose, vt=vt)
+  if (verbose>=vt) print(dbb_tib)
+  
+  # Get Delta Beta::DELTA
+  dbd_tib <- firstVsRestDelta(sdb_mat, method='DELTA', verbose=verbose, vt=vt)
+  if (verbose>=vt) print(dbd_tib)
+  
+  # Get R-Squared::BETA-Mval
+  sbm_cor <- NULL
+  sbm_cor = tryCatch({
+    cor(sbm_mat, method="pearson", use="pairwise.complete.obs")
+  }, warning = function(w) {
+    'warning-SBM-Cor'
+  }, error = function(e) {
+    'error-SBM-Cor'
+  }, finally = {
+    'cleanup-SBM-Cor'
+  })
+  
+  # Get R-Squared::DELTA-Mval
+  sdm_cor <- NULL
+  sdm_cor = tryCatch({
+    cor(sdm_mat, method="pearson", use="pairwise.complete.obs")
+  }, warning = function(w) {
+    'warning-SDM-Cor'
+  }, error = function(e) {
+    'error-SDM-Cor'
+  }, finally = {
+    'cleanup-SDB-Cor'
+  })
+  
+  # R-Squared with Mvales for BETA
+  mbrkey <- NA
+  mbrval <- NA
+  if (!is.null(sbm_cor)) {
+    if (verbose>=vt) print(sbm_cor[1,])
+    ncols <- length(sbm_cor[1,])
+    mbrval <- max(sbm_cor[1,2:ncols])
+    mbridx <- which(sbm_cor[1,2:ncols]==mbrval)
+    mbrkey <- names(sbm_cor[1,2:ncols])[mbridx]
+    mbrval <- round(max(sbm_cor[1,2:ncols]),6)
   }
-  if (verbose>=vt) cat("\t",glue::glue("[{funcTag}]: {TAB}Finished."),"\n\n", sep='')
+  rmb_tib <- tibble("Auto_Sample_BETA_mR2_Key" = mbrkey,
+                    "Auto_Sample_BETA_mR2_Val" = mbrval)
+  
+  # R-Squared with Mvales for DELTA
+  mdrkey <- NA
+  mdrval <- NA
+  if (!is.null(sdm_cor)) {
+    if (verbose>=vt) print(sdm_cor[1,])
+    ncols <- length(sdm_cor[1,])
+    mdrval <- max(sdm_cor[1,2:ncols])
+    mdridx <- which(sdm_cor[1,2:ncols]==mdrval)
+    mdrkey <- names(sdm_cor[1,2:ncols])[mdridx]
+    mdrval <- round(max(sdm_cor[1,2:ncols]),6)
+  }
+  rmd_tib <- tibble("Auto_Sample_DELTA_mR2_Key" = mdrkey,
+                    "Auto_Sample_DELTA_mR2_Val" = mdrval)
+
+  atib <- NULL
+  atib <- dplyr::bind_cols(dbb_tib, dbd_tib,
+                           rmb_tib, rmd_tib)
+  
+  if (verbose>=vt) print(atib)
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB} Finished."),"\n\n", sep='')
   
   atib
 }
@@ -298,33 +366,37 @@ predictAutoSample = function(sam, ref, minPval=0.02, minDelta=0.2, verbose=0, vt
 #                         Sample Summary Methods::
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 
-summarizePrbs = function(prbs, ctl, negsMin=0.02, poobMin=0.2, verbose=0, vt=3) {
+summarizePrbs = function(prbs, ctl, negsMin=0.02, poobMin=0.2, verbose=0, vt=5) {
   funcTag <- 'summarizePrbs'
   
-  if (verbose>=vt) cat("\t", glue::glue("[{funcTag}]: Starting..."),"\n", sep='')
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB} Starting..."),"\n", sep='')
   
   # prbsI   <- prbs$I  %>% dplyr::filter(Probe_Type!='ctl') %>% dplyr::group_by(Probe_Type,Design_Type)
   prbsI   <- prbs$I  %>% dplyr::filter(Probe_Type!='ctl') %>% dplyr::group_by(Probe_Type)
   if (verbose>=vt+2) print(prbsI)
+  
   prbsII  <- prbs$II %>% dplyr::filter(Probe_Type!='ctl') %>% dplyr::group_by(Probe_Type)
   if (verbose>=vt+2) print(prbsII)
+  
   prbsCtl <- prbs$II %>% dplyr::filter(Probe_Type=='ctl') %>% dplyr::select(-Probe_Type) %>%
     dplyr::left_join(ctl, by="Probe_ID") %>%
     dplyr::select(Probe_ID, Probe_Type, everything()) %>% dplyr::group_by(Probe_Type)
   if (verbose>=vt+2) print(prbsCtl)
   
   # Get Overall Detection P-value for CGs only::
-  cgs1 <- prbsI  %>% dplyr::ungroup() %>% dplyr::filter(Probe_Type=='cg') %>% 
-    dplyr::select(NegsDetP, PoobDetP, Swapped)
-  cgs2 <- prbsII %>% dplyr::ungroup() %>% dplyr::filter(Probe_Type=='cg') %>% 
-    dplyr::select(NegsDetP, PoobDetP) %>% dplyr::mutate(Swapped=NA)
-  sumCG <- cgs1 %>% dplyr::bind_rows(cgs2) %>%
-    dplyr::summarise(Total_Count_CG=n(), 
-                     PassDetpNegs_Count_CG=count(NegsDetP<negsMin), 
-                     PassDetpNegs_Percent_CG=round(100*PassDetpNegs_Count_CG/Total_Count_CG,3),
-                     PassDetpPoob_Count_CG=count(PoobDetP<poobMin), 
-                     PassDetpPoob_Percent_CG=round(100*PassDetpPoob_Count_CG/Total_Count_CG,3),
-                     SwappedCount_CG=count(!is.na(Swapped)) )
+  # cgs1 <- prbsI  %>% dplyr::ungroup() %>% dplyr::filter(Probe_Type=='cg') %>% 
+  #   dplyr::select(NegsDetP, PoobDetP, Swapped)
+  # 
+  # cgs2 <- prbsII %>% dplyr::ungroup() %>% dplyr::filter(Probe_Type=='cg') %>% 
+  #   dplyr::select(NegsDetP, PoobDetP) %>% dplyr::mutate(Swapped=NA)
+  # 
+  # sumCG <- cgs1 %>% dplyr::bind_rows(cgs2) %>%
+  #   dplyr::summarise(Total_Count_CG=n(), 
+  #                    PassDetpNegs_Count_CG=count(NegsDetP<negsMin), 
+  #                    PassDetpNegs_Percent_CG=round(100*PassDetpNegs_Count_CG/Total_Count_CG,3),
+  #                    PassDetpPoob_Count_CG=count(PoobDetP<poobMin), 
+  #                    PassDetpPoob_Percent_CG=round(100*PassDetpPoob_Count_CG/Total_Count_CG,3),
+  #                    SwappedCount_CG=count(!is.na(Swapped)) )
   # return(sumCG)
   
   # Infinium I::
@@ -387,14 +459,14 @@ summarizePrbs = function(prbs, ctl, negsMin=0.02, poobMin=0.2, verbose=0, vt=3) 
     tidyr::unite(Probe_Type, Probe_Type, Stat, sep='_') %>% 
     tidyr::spread(Probe_Type, Value) 
   
-  sumAll <- dplyr::bind_cols(sumCG, sumI, sumII, sumCt) %>%
-    dplyr::select(Total_Count_CG, PassDetpNegs_Count_CG, PassDetpNegs_Percent_CG, 
-                  PassDetpPoob_Count_CG, PassDetpPoob_Percent_CG, SwappedCount_CG,
-                  everything())
+  # Old Code for combining all data before seperate DetP_Sum was calculated
+  # sumAll <- dplyr::bind_cols(sumCG, sumI, sumII, sumCt) %>%
+  #   dplyr::select(Total_Count_CG, PassDetpNegs_Count_CG, PassDetpNegs_Percent_CG, 
+  #                 PassDetpPoob_Count_CG, PassDetpPoob_Percent_CG, SwappedCount_CG,
+  #                 everything())
+  sumAll <- dplyr::bind_cols(sumI, sumII, sumCt)
   
-  # Missing Stats::
-  #  - Number of SWAPS
-  if (verbose>=vt) cat("\t", glue::glue("[{funcTag}]: Finished."),"\n\n", sep='')
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB} Finished."),"\n\n", sep='')
   
   sumAll
 }
@@ -474,7 +546,7 @@ bindBands = function(ssets, verbose=0, vt=4) {
   baseI
 }
 
-ssetsToTibs = function(ssets, verbose=0, vt=3) {
+ssetsToTibs = function(ssets, verbose=0, vt=5) {
   funcTag <- 'ssetsToTibs'
   if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB}{TAB} Starting..."),"\n", sep='')
   if (verbose>=vt+5) print(ssets)
@@ -489,7 +561,7 @@ ssetsToTibs = function(ssets, verbose=0, vt=3) {
     dplyr::arrange(Probe_ID)
   if (verbose>=vt+3) cat(glue::glue("[{funcTag}]:{TAB}{TAB} Calculated SigsII::"),"\n", sep='')
   if (verbose>=vt+3) print(sigsII)
-
+  
   base_sigs <- bindBands(ssets[[base]])
   swap_sigs <- bindBands(ssets[[swap]])
   
@@ -524,11 +596,7 @@ ssetsToTibs = function(ssets, verbose=0, vt=3) {
   mval <- sesame::BetaValueToMValue(beta)
   
   if (verbose>=vt+2) cat(glue::glue("[{funcTag}]:{TAB}{TAB} Calculated beta/mvals::"),"\n", sep='')
-  # if (verbose>=vt+3) print(beta)
-  # if (verbose>=vt+3) cat(glue::glue("[{funcTag}]:{TAB}{TAB} mval::"),"\n", sep='')
-  # if (verbose>=vt+3) print(mval)
-  # if (verbose>=vt+3) cat(glue::glue("[{funcTag}]:{TAB}{TAB} END beta/mval::"),"\n\n", sep='')
-  
+
   call <- cbind(beta, mval) %>%
     tibble::as_tibble(rownames='Probe_ID') %>%
     dplyr::rename(Beta=beta, Mval=mval) %>%
@@ -543,7 +611,7 @@ ssetsToTibs = function(ssets, verbose=0, vt=3) {
     ))
   if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB}{TAB} Calls::"),"\n", sep='')
   if (verbose>=vt) print(call)
-
+  
   # Join Data by Design_Type::
   data <- NULL
   data$II <- call %>% dplyr::right_join(sigsII, by="Probe_ID") %>% 
@@ -561,11 +629,11 @@ ssetsToTibs = function(ssets, verbose=0, vt=3) {
 
 fetchSSet = function(prefix, platform, manifest, method='both', desplat=NULL,
                      ssetRDS=NULL, loadRDS=TRUE, saveRDS=TRUE, overRDS=TRUE,
-                     verbose=0, vt=4) {
+                     verbose=0, vt=1) {
   funcTag='fetchSSet'
   if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB} Prefix={prefix}"),"\n", sep='')
   
-  if (is.null(ssetRDS)) ssetRDS <- '/Users/bbarnes/Documents/tmp.sset.rds'
+  # if (is.null(ssetRDS)) ssetRDS <- '/Users/bbarnes/Documents/tmp.sset.rds'
   # outDir <- dirname(ssetRDS)
   # if (!dir.exists(outDir)) dir.create(outDir, recursive=TRUE)
   # TBD: Allow Platforms that are not just EPIC::
@@ -575,17 +643,13 @@ fetchSSet = function(prefix, platform, manifest, method='both', desplat=NULL,
   loadedRDS <- FALSE
   overRDS   <- FALSE
   
-  if (loadRDS && file.exists(ssetRDS)) {
+  if (loadRDS && !is.null(ssetRDS) && file.exists(ssetRDS)) {
     if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB} Loading={ssetRDS}"),"\n", sep='')
     sset <- readr::read_rds(ssetRDS)
     loadedRDS <- TRUE
   } else {
     if (method=='both') {
       sset <- NULL
-      
-      if (verbose>=vt+5) cat("\n\nMANIFEST::\n")
-      if (verbose>=vt+5) print(manifest)
-      if (verbose>=vt+5) cat("MANIFEST\n\n")
       
       sset$base <- sesame::readIDATpair(prefix, platform=platform, manifest=manifest) %>%
         sesame::dyeBiasCorrTypeINorm()
@@ -594,11 +658,7 @@ fetchSSet = function(prefix, platform, manifest, method='both', desplat=NULL,
       #   sesame::dyeBiasCorrTypeINorm() %>%
       sset$base <- sset$base %>% sesame::noob()
       sset$base@platform <- 'EPIC'
-      
-      if (verbose>=vt+3) cat("\t\t", glue::glue("[{funcTag}]: BASE platform=..."),"\n", sep='')
-      if (verbose>=vt+3) cat("\t\t", glue::glue("[{funcTag}]: BASE platform={sset$base@platform}"),"\n", sep='')
-      if (verbose>=vt+3) print(sset$base)
-      
+
       sset$swap <- sesame::readIDATpair(prefix, platform=platform, manifest=manifest) %>%
         sesame::dyeBiasCorrTypeINorm() %>%
         sesame::noob() %>%
@@ -647,6 +707,7 @@ parseIdat = function(file, channel, verbose=0, vt=4) {
   else if (idat$ChipType=='BeadChip 12x8') dat$ChipFormat <- '12x1'
   else if (idat$ChipType=='BeadChip 24x1x4') dat$ChipFormat <- '24x1'
   else if (idat$ChipType=='BeadChip 24x1x2') dat$ChipFormat <- '24x1'
+  else if (idat$ChipType=='Beadchip 24x1x2') dat$ChipFormat <- '24x1'
   else stop("\n",glue::glue("[{funcTag}]: ERROR: Unrecognized ChipType={idat$ChipType}"),"\n\n", sep='')
   
   if (verbose>=vt) cat(glue::glue("[{funcTag}]:{TAB} nrows={tib.nrow}, ChipFormat={dat$ChipFormat}, file={file}"),"\n", sep='')
