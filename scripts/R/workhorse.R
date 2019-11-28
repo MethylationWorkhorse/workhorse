@@ -93,6 +93,7 @@ if (args.dat[1]=='RStudio') {
   opt$Rscript <- '/usr/local/bin/Rscript'
   opt$topDir  <- '/Users/bbarnes/Documents/Projects/workhorse'
   opt$srcDir  <- '/Users/bbarnes/Documents/Projects/workhorse/git/workhorse-master/scripts'
+  opt$srcDir  <- '/Users/bbarnes/Documents/git-test2/workhorse/scripts'
   prgmPath <- file.path(opt$srcDir, 'R', paste0(opt$prgmTag,'.R'))
   stopifnot(file.exists(prgmPath))
   
@@ -506,6 +507,7 @@ if (opt$cluster) {
     for (prefix in names(chipPrefixes)) {
       if (!is.null(tarSample) && prefix!=tarSample) next
       
+      # opt$retSSET <- TRUE
       ss.ret <- singleSampleWorkflow(prefix=chipPrefixes[[prefix]],
                                      opt=opt,
                                      man.cpg = man.cpg.tib,

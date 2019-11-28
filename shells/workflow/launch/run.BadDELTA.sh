@@ -2,7 +2,7 @@
 idatName=BadDELTA
 prgmTag=workhorse
 
-TOP_MAC=/Users/bbarnes/Documents/Projects/${prgmTag}/git/${prgmTag}
+TOP_MAC=/Users/bbarnes/Documents/git-test2/${prgmTag}
 TOP_LIX=/illumina/scratch/darkmatter/Projects/${prgmTag}/git/${prgmTag}
 
 if [ -e ${TOP_MAC} ]; then
