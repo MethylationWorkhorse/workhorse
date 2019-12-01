@@ -192,8 +192,8 @@ fetchPrefix = function(prefix, sig_csv, sss_csv, loadIdat=FALSE, saveIdat=FALSE,
   
   dat <- NULL
   if (loadIdat && file.mtime(sig_csv) < file.mtime(sss_csv)) {
-    dat$sig <- readr::read_csv(sig_csv)
-    dat$sss <- readr::read_csv(sss_csv)
+    dat$sig <- suppressMessages(suppressWarnings(readr::read_csv(sig_csv) ))
+    dat$sss <- suppressMessages(suppressWarnings(readr::read_csv(sss_csv) ))
   } else {
     dat <- prefixToTib(prefix=prefix, verbose=0,vt=4,tc=1,tabsStr='')
     # print(dat)
