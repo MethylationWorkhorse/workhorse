@@ -32,17 +32,39 @@ opt$single     <- FALSE
 opt$parallel   <- FALSE
 opt$cluster    <- FALSE
 
-opt$writeSSheet <- FALSE
-opt$writeMIDMAN <- FALSE
+opt$fresh       <- FALSE
 
-opt$writeMAN    <- FALSE
-opt$writeGRP    <- FALSE
+opt$loadIDATS   <- FALSE
+opt$loadSSETS   <- FALSE
+
+opt$writeIDATS  <- FALSE
+opt$writeSSETS  <- FALSE
+
+opt$writePrbCSV <- TRUE
+opt$writePrbRDS <- TRUE
+opt$writeSSheet <- TRUE
+
+# opt$writeMIDMAN <- FALSE
+# opt$writeSESMAN <- FALSE
+# opt$readfMIDMAN <- FALSE
+
+# These write
 opt$writeRDS    <- FALSE
 opt$writeCSV    <- FALSE
+
+
+
 
 opt$loadMAN     <- FALSE
 opt$loadGRP     <- FALSE
 opt$loadRDS     <- FALSE
+
+# Save intermediate manifest csv files
+opt$saveIDATS  <- FALSE
+opt$saveMAN    <- FALSE
+opt$saveGRP    <- FALSE
+
+# Save intermediat RDS SSET files
 opt$saveRDS     <- FALSE
 opt$overRDS     <- FALSE
 
@@ -57,6 +79,9 @@ opt$srcDir   <- NULL
 opt$outDir   <- NULL
 opt$idatsDir <- NULL
 opt$funcScript <- 'workhorse_functions.R'
+opt$sesaScript <- 'sesame_functions.R'
+opt$idatScript <- 'idat_functions.R'
+
 opt$sampleSheet <- NULL
 
 opt$platform  <- 'EPIC-B4'
@@ -73,7 +98,7 @@ opt$poobMinCutoff_Relaxed <- 80
 opt$negsMinCutoff_Relaxed <- 96
 
 
-opt$verbosity <- 3
+opt$verbosity <- 4
 
 # QC Variable
 tarSample <- NULL
@@ -92,10 +117,12 @@ args.dat <- commandArgs(trailingOnly = FALSE)
 if (args.dat[1]=='RStudio') {
   opt$Rscript <- '/usr/local/bin/Rscript'
   opt$topDir  <- '/Users/bbarnes/Documents/Projects/workhorse'
-  opt$srcDir  <- '/Users/bbarnes/Documents/Projects/workhorse/git/workhorse-master/scripts'
-  opt$srcDir  <- '/Users/bbarnes/Documents/git-test2/workhorse/scripts'
+  opt$srcDir  <- '/Users/bbarnes/Documents/Projects/workhorse/git/workhorse/scripts'
+  # opt$srcDir  <- '/Users/bbarnes/Documents/git-test2/workhorse/scripts'
   prgmPath <- file.path(opt$srcDir, 'R', paste0(opt$prgmTag,'.R'))
   stopifnot(file.exists(prgmPath))
+  
+  opt$fresh <- TRUE
   
   opt$runMode  <- args.dat[1]
   opt$outDir   <- file.path(opt$topDir, 'workspace', opt$prgmTag)
@@ -128,8 +155,8 @@ if (args.dat[1]=='RStudio') {
   opt$writeSSheet <- TRUE
   opt$writeMIDMAN <- FALSE
   
-  opt$writeMAN    <- FALSE
-  opt$writeGRP    <- FALSE
+  opt$saveMAN    <- FALSE
+  opt$saveGRP    <- FALSE
   opt$writeRDS    <- TRUE
   opt$writeCSV    <- FALSE
   
@@ -141,7 +168,6 @@ if (args.dat[1]=='RStudio') {
   
   opt$retSSET     <- FALSE
   opt$retPRBS     <- FALSE
-  
 } else {
   prgmPath <- substring(args.dat[grep("--file=", args.dat)], 8)
   
@@ -173,7 +199,11 @@ if (args.dat[1]=='RStudio') {
     
     # Standard Variables::
     make_option(c("--funcScript"), type="character", default=opt$funcScript, 
-                help="name of functions script to soruce [default= %default]", metavar="character"),
+                help="Name of general functions script to soruce [default= %default]", metavar="character"),
+    make_option(c("--sesaScript"), type="character", default=opt$sesaScript, 
+                help="Name of Sesame functions script to soruce [default= %default]", metavar="character"),
+    make_option(c("--idatScript"), type="character", default=opt$idatScript, 
+                help="Name of Idat functions script to soruce [default= %default]", metavar="character"),
     
     # Platform/Method Parameters::
     make_option(c("--platform"), type="character", default=opt$platform, 
@@ -200,28 +230,65 @@ if (args.dat[1]=='RStudio') {
                 help="Relaxed detection p-value threshold percent for negative controls [default= %default]", metavar="double"),
     
     # Boolean Variables::
+    make_option(c("--fresh"), action="store_true", default=opt$fresh,
+                help="Boolean variable force fresh build, e.g. ignore all other boolean parameters [default= %default]", metavar="boolean"),
+    
     make_option(c("--autoDetect"), action="store_true", default=opt$autoDetect,
                 help="Boolean variable to attempt auto sample detect [default= %default]", metavar="boolean"),
     
+    #
+    # Functional Start::
+    #
+    make_option(c("--saveMAN"), action="store_true", default=opt$saveMAN,
+                help="Boolean to write Master Manifest [default= %default]", metavar="boolean"),
+    
+    make_option(c("--loadMAN"), action="store_true", default=opt$loadMAN,
+                help="Boolean to load previous Manifest files [default= %default]", metavar="boolean"),
+    make_option(c("--loadIDATS"), action="store_true", default=opt$loadIDATS,
+                help="Boolean to load previously processed IDATS files [default= %default]", metavar="boolean"),
+    make_option(c("--loadSSETS"), action="store_true", default=opt$loadSSETS,
+                help="Boolean to load previously processed SSETS files [default= %default]", metavar="boolean"),
+    
+    make_option(c("--writeIDATS"), action="store_true", default=opt$writeIDATS,
+                help="Boolean to write intermediate IDATS [default= %default]", metavar="boolean"),
+    make_option(c("--writeSSETS"), action="store_true", default=opt$writeSSETS,
+                help="Boolean to write intermediate SSETS [default= %default]", metavar="boolean"),
+    make_option(c("--writePrbCSV"), action="store_true", default=opt$writePrbCSV,
+                help="Boolean to write Probe Data (CSV) [default= %default]", metavar="boolean"),
+    make_option(c("--writePrbRDS"), action="store_true", default=opt$writePrbRDS,
+                help="Boolean to write Probe Data (RDS) [default= %default]", metavar="boolean"),
     make_option(c("--writeSSheet"), action="store_true", default=opt$writeSSheet,
                 help="Boolean to write Auto-SampleSheet [default= %default]", metavar="boolean"),
+    
+    # Processing Parameters::
+    make_option(c("--single"), action="store_true", default=opt$single, 
+                help="Boolean variable to run a single sample on a single-core [default= %default]", metavar="boolean"),
+    make_option(c("--parallel"), action="store_true", default=opt$parallel, 
+                help="Boolean variable to run parallel on multi-core [default= %default]", metavar="boolean"),
+    make_option(c("--cluster"), action="store_true", default=opt$cluster,
+                help="Boolean variable to run jobs on cluster by chip [default= %default]", metavar="boolean"),
+
+    #    
+    # Function End::
+    #
+    
     make_option(c("--writeMIDMAN"), action="store_true", default=opt$writeMIDMAN,
                 help="Boolean to write Sample Mid-Manifest [default= %default]", metavar="boolean"),
-    make_option(c("--writeMAN"), action="store_true", default=opt$writeMAN,
-                help="Boolean to write Master Manifest [default= %default]", metavar="boolean"),
-    make_option(c("--writeGRP"), action="store_true", default=opt$writeGRP,
-                help="Boolean to write Master Grouped Manifest [default= %default]", metavar="boolean"),
     make_option(c("--writeRDS"), action="store_true", default=opt$writeRDS,
                 help="Boolean to write full-RDS data files [default= %default]", metavar="boolean"),
     make_option(c("--writeCSV"), action="store_true", default=opt$writeCSV,
                 help="Boolean to write full-CSV data files [default= %default]", metavar="boolean"),
     
-    make_option(c("--loadMAN"), action="store_true", default=opt$loadMAN,
-                help="Boolean to load previous Manifest files [default= %default]", metavar="boolean"),
     make_option(c("--loadGRP"), action="store_true", default=opt$loadGRP,
                 help="Boolean to load previous Master Grouped Manifest [default= %default]", metavar="boolean"),
     make_option(c("--loadRDS"), action="store_true", default=opt$loadRDS,
                 help="Boolean to load previous RDS files [default= %default]", metavar="boolean"),
+    
+    # Save intermediate Manifest Files::
+    make_option(c("--saveGRP"), action="store_true", default=opt$saveGRP,
+                help="Boolean to write Master Grouped Manifest [default= %default]", metavar="boolean"),
+  
+    # Save intermediate SSET RDS files::  
     make_option(c("--saveRDS"), action="store_true", default=opt$saveRDS,
                 help="Boolean to save current RDS files [default= %default]", metavar="boolean"),
     make_option(c("--overRDS"), action="store_true", default=opt$overRDS,
@@ -234,14 +301,6 @@ if (args.dat[1]=='RStudio') {
     make_option(c("--retPRBS"), action="store_true", default=opt$retPRBS,
                 help="Boolean to return PRBS intermediate for debuging [default= %default]", metavar="boolean"),
     
-    # Processing Parameters::
-    make_option(c("--single"), action="store_true", default=opt$single, 
-                help="Boolean variable to run a single sample on a single-core [default= %default]", metavar="boolean"),
-    make_option(c("--parallel"), action="store_true", default=opt$parallel, 
-                help="Boolean variable to run parallel on multi-core [default= %default]", metavar="boolean"),
-    make_option(c("--cluster"), action="store_true", default=opt$cluster,
-                help="Boolean variable to run jobs on cluster by chip [default= %default]", metavar="boolean"),
-    
     # Verbosity::
     make_option(c("-v", "--verbosity"), type="double", default=opt$verbosity, 
                 help="0-5 (5 is very verbosity) [default= %default]", metavar="double")
@@ -250,8 +309,9 @@ if (args.dat[1]=='RStudio') {
   opt = parse_args(opt_parser)
 }
 opt$prgmPath <- prgmPath
-if (!is.null(opt$funcScript) && !file.exists(opt$funcScript))
-  opt$funcScript <- file.path(opt$srcDir, 'R', opt$funcScript)
+if (!is.null(opt$funcScript) && !file.exists(opt$funcScript)) opt$funcScript <- file.path(opt$srcDir, 'R', opt$funcScript)
+if (!is.null(opt$sesaScript) && !file.exists(opt$sesaScript)) opt$sesaScript <- file.path(opt$srcDir, 'R', opt$sesaScript)
+if (!is.null(opt$idatScript) && !file.exists(opt$idatScript)) opt$idatScript <- file.path(opt$srcDir, 'R', opt$idatScript)
 
 if (is.null(opt$Rscript)  || 
     is.null(opt$prgmTag)  || 
@@ -274,23 +334,13 @@ if (is.null(opt$Rscript)  ||
            !dir.exists(opt$idatsDir) ||
            !file.exists(opt$prgmPath) ||
            !file.exists(opt$Rscript)  ||
-           !file.exists(opt$funcScript) ) {
+           !file.exists(opt$funcScript) ||
+           !file.exists(opt$sesaScript) ||
+           !file.exists(opt$idatScript)) {
   print_help(opt_parser)
   optTib <- bind_rows(opt) %>% gather("Options", "Value")
   print(optTib %>% as.data.frame())
   stop("Directory arguments do not exist!\n\n")
-}
-
-if (opt$verbosity>2) {
-  cat(glue::glue("[{opt$prgmTag}]: Options::"),"\n", sep='')
-  opt.tib <- opt %>% bind_rows() %>% gather("Options", "Value")
-  print(opt.tib)
-}
-source(opt$funcScript)
-opt$datDir <- file.path(opt$topDir, 'dat')
-if (!dir.exists(opt$datDir)) {
-  stop(glue::glue("[{opt$prgmTag}]: Critical ERROR: datDir={datDir} does not exist!"),"\n", sep='')
-  q()
 }
 
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
@@ -299,6 +349,52 @@ if (!dir.exists(opt$datDir)) {
 
 sysTime <- Sys.time()
 cat(glue::glue("[{opt$prgmTag}]: Begin(time={sysTime})"),"\n\n",sep='')
+
+if (opt$verbosity>2) {
+  cat(glue::glue("[{opt$prgmTag}]: Options::"),"\n", sep='')
+  opt.tib <- opt %>% bind_rows() %>% gather("Options", "Value")
+  print(opt.tib)
+}
+source(opt$funcScript)
+source(opt$sesaScript)
+source(opt$idatScript)
+opt$datDir <- file.path(opt$topDir, 'dat')
+if (!dir.exists(opt$datDir)) {
+  stop(glue::glue("[{opt$prgmTag}]: Critical ERROR: datDir={datDir} does not exist!"),"\n", sep='')
+  q()
+}
+
+if (opt$fresh) {
+  opt$writeMIDMAN <- FALSE
+  opt$writeRDS    <- FALSE
+  opt$writeCSV    <- FALSE
+  
+  opt$loadGRP     <- FALSE
+  opt$loadRDS     <- FALSE
+  
+  # Save intermediate manifest csv files
+  opt$saveMAN    <- FALSE
+  opt$saveGRP    <- FALSE
+  
+  # Save intermediat RDS SSET files
+  opt$saveRDS     <- FALSE
+  opt$overRDS     <- FALSE
+  
+  ## CURRENT VARIABLES::
+  opt$loadMAN     <- TRUE
+  opt$loadIDATS   <- FALSE
+  opt$loadSSETS   <- FALSE
+  
+  opt$writeIDATS  <- TRUE
+  opt$writeSSETS  <- TRUE
+  
+  opt$writePrbCSV <- FALSE
+  opt$writePrbRDS <- TRUE
+  opt$writeSSheet <- TRUE
+
+  rm.dir <- '/Users/bbarnes/Documents/Projects/workhorse/workspace/workhorse/testing'  
+  if (dir.exists(rm.dir)) unlink(rm.dir, recursive=TRUE)
+}
 
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 #                              Sample Sheet::
@@ -401,7 +497,7 @@ if (opt$cluster) {
   man.grp.tib <- NULL
   
   # Load previous versions if both are defined
-  if (opt$loadMAN==TRUE &&
+  if (opt$loadMAN &&
       file.exists(man.cpg.rds) && 
       file.exists(man.cpg.csv) &&
       file.exists(man.add.rds) &&
@@ -413,7 +509,7 @@ if (opt$cluster) {
     man.add.tib <- readr::read_rds(man.add.rds)
     cat(glue::glue("[{opt$prgmTag}]: Loaded CSV/RDS Manifests({opt$platform})."),"\n\n", sep='')
     
-    opt$writeMAN <- FALSE
+    opt$saveMAN <- FALSE
   } else {
     if (opt$platform=='EPIC' ||
         opt$platform=='HM450' ||
@@ -424,7 +520,7 @@ if (opt$cluster) {
       man.add.tib <- man.cpg.tib %>% dplyr::arrange(U)
     } else if (opt$platform=='NZT') {
       # epic.ctl.csv <- file.path(opt$topDir, 'dat/ctl/EPIC-B0.controls.sesame.csv.gz')
-      # epic.ctl.tib <- suppressMessages(suppressWarnings(readr::read_csv(epic.ctl.csv) ))
+      # epic.ctl_tib <- suppressMessages(suppressWarnings(readr::read_csv(epic.ctl.csv) ))
       
       man.cpg.csv <- file.path(opt$topDir, 'dat/manifest/NZT.manifest.ann.csv.gz')
       man.cpg.tib <- suppressMessages(suppressWarnings(readr::read_csv(man.cpg.csv) )) %>%
@@ -444,7 +540,7 @@ if (opt$cluster) {
     if (opt$useGRP) man.grp.tib <- addManifestGroups(platform='EPIC', build=opt$build, manCPG=man.cpg.tib, verbose=opt$verbosity)
   }
 
-  if (opt$writeMAN) {
+  if (opt$saveMAN) {
     cat(glue::glue("[{opt$prgmTag}]: Writing CSV/RDS Manifests datDir={opt$datDir}"),"\n", sep='')
     readr::write_csv(man.cpg.tib, man.cpg.csv)
     readr::write_rds(man.cpg.tib, man.cpg.rds, compress='gz')
@@ -452,7 +548,7 @@ if (opt$cluster) {
     readr::write_rds(man.add.tib, man.add.rds, compress='gz')
     cat(glue::glue("[{opt$prgmTag}]: Done writing CSV/RDS Manifests"),"\n\n", sep='')
   }
-  if (opt$writeGRP) {
+  if (opt$saveGRP) {
     if (!is.null(man.grp.tib)) {
       cat(glue::glue("[{opt$prgmTag}]: Writing CSV/RDS Grouped Manifests datDir={opt$datDir}"),"\n", sep='')
       readr::write_csv(man.grp.tib, man.grp.csv)
@@ -472,19 +568,22 @@ if (opt$cluster) {
   if (opt$autoDetect) {
     Pools <- c('BETA', 'DELTA')
     for (pool in Pools) {
-      can.rds <- file.path(opt$topDir, 'dat/ref', paste0('Canontcal_',pool,'_Betas-Mvals.rds'))
+      can.rds <- file.path(opt$topDir, 'dat/ref', paste0('Canonical_',pool,'_Betas-Mvals.rds'))
       ref.rds <- file.path(opt$topDir, 'dat/ref', paste0('Reference_',pool,'_Betas-Mvals.rds'))
       
-      cat(glue::glue("[{opt$prgmTag}]: Loading Canonical({pool}) RDS={can.rds}"),"\n", sep='')
+      if (opt$verbosity>1) cat(glue::glue("[{opt$prgmTag}]: Loading Canonical({pool}) RDS={can.rds}"),"\n", sep='')
       can.tib[[pool]] <- readr::read_rds(can.rds)
-      cat(glue::glue("[{opt$prgmTag}]: Loading Reference({pool}) RDS={ref.rds}"),"\n", sep='')
-      ref.tib[[pool]] <- readr::read_rds(ref.rds)
-      cat(glue::glue("[{opt$prgmTag}]: Loaded both Canonical/Reference({pool}) Samples for Auto-Detect!"),"\n\n", sep='')
+      
+      if (FALSE) {
+        if (opt$verbosity>1) cat(glue::glue("[{opt$prgmTag}]: Loading Reference({pool}) RDS={ref.rds}"),"\n", sep='')
+        ref.tib[[pool]] <- readr::read_rds(ref.rds)
+      }
+      if (opt$verbosity>1) cat(glue::glue("[{opt$prgmTag}]: Loaded both Canonical/Reference({pool}) Samples for Auto-Detect!"),"\n\n", sep='')
     }
   }
   
   # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-  #                                  Main::
+  #                                Main::Chips
   # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 
   ssheets <- NULL
@@ -498,7 +597,7 @@ if (opt$cluster) {
                                      man.ses = NULL,
                                      can.tib = can.tib,
                                      ref.tib = ref.tib,
-                                     ctl.tib = NULL,
+                                     ctls_tib = NULL,
                                      vt=1)
       ss.ret
     }
@@ -508,6 +607,9 @@ if (opt$cluster) {
       if (!is.null(tarSample) && prefix!=tarSample) next
       
       # opt$retSSET <- TRUE
+      # opt$fullData <- TRUE
+      # opt$writeMIDMAN <- FALSE
+      # opt$saveRDS  <- FALSE
       ss.ret <- singleSampleWorkflow(prefix=chipPrefixes[[prefix]],
                                      opt=opt,
                                      man.cpg = man.cpg.tib,
@@ -515,8 +617,13 @@ if (opt$cluster) {
                                      man.ses = NULL,
                                      can.tib = can.tib,
                                      ref.tib = ref.tib,
-                                     ctl.tib = NULL,
+                                     ctls_tib = NULL,
                                      vt=1)
+
+      # if (opt$fullData) {
+      #   ss.print <- ss.ret$sam_ss_tib %>% gather() %>% as.data.frame() %>% head(n=50)
+      #   print(ss.print)
+      # }
       
       ssheets[[prefix]] <- ss.ret
       if (opt$single) break

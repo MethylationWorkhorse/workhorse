@@ -10,9 +10,7 @@ idatName=$1
 
 prgmTag=workhorse
 
-# TOP_MAC=/Users/bbarnes/Documents/Projects/${prgmTag}
-# TOP_MAC=/Users/bbarnes/Documents/Projects/${prgmTag}/git/${prgmTag}
-TOP_MAC=/Users/bbarnes/Documents/git-test2/${prgmTag}
+TOP_MAC=/Users/bbarnes/Documents/Projects/${prgmTag}/git/${prgmTag}
 TOP_LIX=/illumina/scratch/darkmatter/Projects/${prgmTag}/git/${prgmTag}
 
 if [ -e ${TOP_MAC} ]; then
@@ -36,11 +34,13 @@ fi
 single=false
 parallel=true
 cluster=true
-verbosity=3
+verbosity=4
 
 # Source Directory Parameters::
 srcDir=${TOP_SRC}/scripts
 funcScript=${srcDir}/R/workhorse_functions.R
+sesaScript=${srcDir}/R/sesame_functions.R
+idatScript=${srcDir}/R/idat_functions.R
 EXE=${srcDir}/R/${prgmTag}.R
 
 # Data Directory Parameters::
@@ -51,18 +51,27 @@ idatsDir=${TOP_DIR}/idats/${idatName}
 # Generally Default Parameter
 autoDetect=true
 writeSSheet=true
-writeMIDMAN=true
-writeMAN=true
-writeGRP=true
-writeRDS=true
+writeMIDMAN=false
+writeMAN=false
+writeGRP=false
+writeRDS=false
 writeCSV=false
-loadMAN=false
+loadMAN=true
 loadGRP=false
-loadRDS=true
-saveRDS=true
-overRDS=true
+loadRDS=false
+saveRDS=false
+overRDS=false
 
-if [ 1 ]; then
+# Functional Parameters
+loadIDATS=true
+loadSSETS=true
+writeIDATS=true
+writeSSETS=true
+writePrbCSV=true
+writePrbRDS=true
+writeSSheet=true
+
+if [ 0 ]; then
     autoDetect=true
     writeSSheet=true
     writeMIDMAN=false
@@ -104,8 +113,9 @@ CMD+=" --"Rscript=${Rscript}
 CMD+=" --"outDir=${outDir}
 CMD+=" --"idatsDir=${idatsDir}
 CMD+=" --"topDir=${topDir}
-# CMD+=" --"srcDir=${srcDir}
 CMD+=" --"funcScript=${funcScript}
+CMD+=" --"sesaScript=${sesaScript}
+CMD+=" --"idatScript=${idatScript}
 CMD+=" --"platform=${platform}
 CMD+=" --"build=${build}
 CMD+=" --"method=${method}
@@ -156,6 +166,30 @@ fi
 if [ "${cluster}" = true ]; then
     CMD+=" --cluster"
 fi
+
+# Adding Functional Parameters
+if [ "${loadIDATS}" = true ]; then
+    CMD+=" --loadIDATS"
+fi
+if [ "${loadSSETS}" = true ]; then
+    CMD+=" --loadSSETS"
+fi
+if [ "${writeIDATS}" = true ]; then
+    CMD+=" --writeIDATS"
+fi
+if [ "${writeSSETS}" = true ]; then
+    CMD+=" --writeSSETS"
+fi
+if [ "${writePrbCSV}" = true ]; then
+    CMD+=" --writePrbCSV"
+fi
+if [ "${writePrbRDS}" = true ]; then
+    CMD+=" --writePrbRDS"
+fi
+if [ "${writeSSheet}" = true ]; then
+    CMD+=" --writeSSheet"
+fi
+
 
 mkdir -p ${outDir}
 
