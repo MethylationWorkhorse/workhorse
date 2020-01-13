@@ -20,7 +20,6 @@ manifest=B4
 prgmTag=workhorse
 EXE_NAME=lighthoof_main
 
-# TOP_MAC=/Users/bbarnes/Documents/Projects/${prgmTag}
 TOP_MAC=/Users/bbarnes/Documents/CustomerFacing
 TOP_LIX=/illumina/scratch/darkmatter/data
 

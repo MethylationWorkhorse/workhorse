@@ -102,7 +102,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     #                     'Dye-Swap-Noob' Order of Operations::
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-    if (FALSE) {
+    if (TRUE) {
       sCalls <- c('dyeBiasCorrTypeINorm', 'inferTypeIChannel', 'noob')
       nCalls <- c(FALSE, TRUE,  TRUE)
       pCalls <- c(FALSE, TRUE,  TRUE)
@@ -113,12 +113,16 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
       ses_data <- sesameWorkflow(sset=raw_sset, add=add, call=call_tib, sigs=sigs_tib, pheno=phen_sum_tib,
                                  stepCalls=sCalls, negsCalls=nCalls,poobCalls=pCalls, betaCalls=bCalls, intsCalls=iCalls, fenoCalls=fCalls,
                                  verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tTracker)
+      
+      call_tib <- ses_data[[1]]
+      sigs_tib <- ses_data[[2]]
+      phen_sum_tib <- ses_data[[3]]
     }
     
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     #                  SwapOpen:: 'Swap-Noob-Dye' Order of Operations::
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-    if (FALSE) {
+    if (TRUE) {
       sCalls <- c('inferTypeIChannel','noob','dyeBiasCorrTypeINorm')
       
       nCalls <- c(TRUE,  FALSE, TRUE)
@@ -130,6 +134,10 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
       ses_data <- sesameWorkflow(sset=raw_sset, add=add, call=call_tib, sigs=sigs_tib, pheno=phen_sum_tib,
                                  stepCalls=sCalls, negsCalls=nCalls,poobCalls=pCalls, betaCalls=bCalls, intsCalls=iCalls, fenoCalls=fCalls,
                                  verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tTracker)
+      
+      call_tib <- ses_data[[1]]
+      sigs_tib <- ses_data[[2]]
+      phen_sum_tib <- ses_data[[3]]
     }
     
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
@@ -137,7 +145,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Building 'OpenSesame'.{RET}"))
     
-    if (FALSE) {
+    if (TRUE) {
       # NOTES: This is what OpenSesame does. The main difference is extracting detection p-values first. 
       #
       core_oo_str  <- 'RNDI'
@@ -293,10 +301,10 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
   if (opt$verbosity>=vt) tTracker %>% print()
   if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Done.{RET}{RET}"))
   
-  if (FALSE && retData) {
+  if (retData) {
     ret <- NULL
     ret$idat   <- idat$sig
-    ret$sset   <- sset_ret
+    # ret$sset   <- sset_ret
     
     ret$call   <- call_tib
     ret$sigs   <- sigs_tib

@@ -91,9 +91,8 @@ cat(glue::glue("[{opt$prgmTag}]: Starting(time={ctime})"),"\n\n",sep='')
 args.dat <- commandArgs(trailingOnly = FALSE)
 if (args.dat[1]=='RStudio') {
   opt$Rscript <- '/usr/local/bin/Rscript'
-  opt$topDir  <- '/Users/bbarnes/Documents/Projects/workhorse'
-  opt$srcDir  <- '/Users/bbarnes/Documents/Projects/workhorse/git/workhorse-master/scripts'
-  opt$srcDir  <- '/Users/bbarnes/Documents/git-test/workhorse/scripts'
+  opt$topDir  <- '/Users/bbarnes/Documents/CustomerFacing'
+  opt$srcDir  <- '/Users/bbarnes/Documents/CustomerFacing/git/workhorse/scripts'
   prgmPath <- file.path(opt$srcDir, 'R', paste0(opt$prgmTag,'.R'))
   stopifnot(file.exists(prgmPath))
   
@@ -107,6 +106,8 @@ if (args.dat[1]=='RStudio') {
     opt$idatsDir  <- file.path(opt$topDir, 'idats', 'Open-ReferenceBETA')
     opt$idatsDir  <- file.path(opt$topDir, 'idats', 'ReferenceBETA')
     opt$idatsDir  <- file.path(opt$topDir, 'idats', 'ReferenceBETA', '201502830033')
+    
+    opt$idatsDir  <- file.path(opt$topDir, 'idats_BadDELTA')
 
     # tarSample <- '202761400009_R07C01'  # M
     # tarSample <- '202761400009_R06C01'  # H
@@ -273,11 +274,17 @@ if (is.null(opt$Rscript)  ||
            !dir.exists(opt$srcDir)   ||
            !dir.exists(opt$idatsDir) ||
            !file.exists(opt$prgmPath) ||
-           !file.exists(opt$Rscript)  ||
+           # !file.exists(opt$Rscript)  ||
            !file.exists(opt$funcScript) ) {
   print_help(opt_parser)
   optTib <- bind_rows(opt) %>% gather("Options", "Value")
   print(optTib %>% as.data.frame())
+  print(opt$topDir)
+  print(opt$srcDir)
+  print(opt$idatsDir)
+  print(opt$prgmPath)
+  print(opt$Rscript)
+  print(opt$funcScript)
   stop("Directory arguments do not exist!\n\n")
 }
 
@@ -472,7 +479,7 @@ if (opt$cluster) {
   if (opt$autoDetect) {
     Pools <- c('BETA', 'DELTA')
     for (pool in Pools) {
-      can.rds <- file.path(opt$topDir, 'dat/ref', paste0('Canontcal_',pool,'_Betas-Mvals.rds'))
+      can.rds <- file.path(opt$topDir, 'dat/ref', paste0('Canonical_',pool,'_Betas-Mvals.rds'))
       ref.rds <- file.path(opt$topDir, 'dat/ref', paste0('Reference_',pool,'_Betas-Mvals.rds'))
       
       cat(glue::glue("[{opt$prgmTag}]: Loading Canonical({pool}) RDS={can.rds}"),"\n", sep='')

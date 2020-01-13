@@ -101,9 +101,9 @@ args.dat <- commandArgs(trailingOnly = FALSE)
 if (args.dat[1]=='RStudio') {
   
   par$runMode    <- args.dat[1]
-  par$dirRelPath <- file.path(par$macDir, 'git/workhorse/scripts/R')
+  par$dirRelPath <- file.path(par$macDir, 'git/workhorse/scripts')
   par$prgmTag    <- 'lighthoof_main'
-  par$exeLocPath <- file.path(par$dirRelPath, paste0(par$prgmTag,'.R'))
+  par$exeLocPath <- file.path(par$dirRelPath, 'R', paste0(par$prgmTag,'.R'))
   
   opt$Rscript  <- 'Rscript'
   par$topDir   <- par$macDir
@@ -389,16 +389,12 @@ if (opt$cluster) {
     }
   } else {
     
-    # par$retData <- TRUE
-    # par$retData <- FALSE
-    
     for (prefix in names(chipPrefixes)) {
       # chipTimes[[prefix]] <-
       #   sesamizeSingleSample(prefix=chipPrefixes[[prefix]], man=man_tib, add=add_tib, autoRef=auto_can_tib, opt=opt, retData=par$retData)
       
       rdat <- sesamizeSingleSample(prefix=chipPrefixes[[prefix]], man=man_tib, add=add_tib, autoRef=auto_sam_tib, opt=opt, retData=par$retData)
-      # rdat <- sesamizeSingleSample(prefix=chipPrefixes[[prefix]], man=man_tib, add=add_tib, autoRef=auto_sam_tib, opt=opt, retData=TRUE)
-      
+
       if (opt$single) break
     }
   }

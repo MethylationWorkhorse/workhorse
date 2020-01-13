@@ -129,9 +129,6 @@ sesameWorkflow = function(sset=NULL, add, call, sigs, pheno, beadPool=NULL,
                                    !!sexKaryo_str  := sexKaryo,
                                    !!ethnicity_str := ethnicity
                                    )
-        cat("\n\n\nBEAD_POOL=",beadPool,"\n\n\n",sep='')
-        print(phen_tib)
-        cat("\nDONE BEAD_POOL!\n\n")
 
         pheno <- pheno %>% dplyr::bind_cols(phen_tib)
       }

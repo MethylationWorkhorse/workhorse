@@ -10,19 +10,23 @@ idatName=$1
 
 prgmTag=workhorse
 
-TOP_MAC=/Users/bbarnes/Documents/Projects/${prgmTag}
-TOP_LIX=/illumina/scratch/darkmatter/Projects/${prgmTag}
+TOP_MAC=/Users/bbarnes/Documents/CustomerFacing
+TOP_LIX=/illumina/scratch/darkmatter/data
 
 if [ -e ${TOP_MAC} ]; then
     TOP=${TOP_MAC}
+    DAT=${TOP_MAC}/dat
+    SRC=${TOP_MAC}/git/${prgmTag}
     CONDA=mac
-    Rscript=/usr/local/bin/Rscript
+    RSCRIPT=Rscript
 elif [ -e ${TOP_LIX} ]; then
     TOP=${TOP_LIX}
+    DAT=${TOP_LIX}/dat
+    SRC=${TOP_LIX}/git/${prgmTag}
     CONDA=conda_4.6.8
     # CONDA=Anaconda2-2019.10-Linux-x86_64
     # CONDA=Anaconda3-2019.10-Linux-x86_64
-    Rscript=/illumina/scratch/darkmatter/thirdparty/${CONDA}/bin/Rscript
+    RSCRIPT=/illumina/scratch/darkmatter/thirdparty/${CONDA}/bin/Rscript
 else
     echo "Unrecognized top directory!"
     exit
@@ -34,13 +38,13 @@ parallel=true
 cluster=true
 verbosity=3
 
-R_DIR=${TOP}/scripts/R
+R_DIR=${SRC}/scripts/R
 EXE=${R_DIR}/${prgmTag}.R
 
 # Directory Parameters::
 outDir=${TOP}/builds/${prgmTag}/${idatName}
-idatsDir=${TOP}/idats/${idatName}
-srcDir=${TOP}/scripts
+idatsDir=${TOP}/idats_${idatName}
+srcDir=${SRC}/scripts
 funcScript=${srcDir}/R/workhorse_functions.R
 
 # Generally Default Parameter
@@ -74,9 +78,10 @@ negsMinPval=0.02
 # echo "Rscript="${RSCRIPT}
 # echo "exe="${EXE}
 
-CMD=${Rscript}" "${EXE}
+CMD=${RSCRIPT}" "${EXE}
 CMD+=" --"verbosity=${verbosity}
-CMD+=" --"Rscript=${Rscript}
+CMD+=" --"Rscript=${RSCRIPT}
+CMD+=" --"topDir=${TOP}
 CMD+=" --"outDir=${outDir}
 CMD+=" --"idatsDir=${idatsDir}
 CMD+=" --"srcDir=${srcDir}
