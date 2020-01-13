@@ -337,7 +337,7 @@ auto_ss_tib <- loadAutoSampleSheets(dir=opt$buildDir, platform=opt$platform, man
                                     addPaths=opt$addressPath, 
                                     verbose=opt$verbosity,tt=pTracker)
 
-file_list <- list.files(opt$samDir, pattern='SampleSheet.csv', full.names=TRUE)
+# file_list <- list.files(opt$samDir, pattern='SampleSheet.csv', full.names=TRUE)
 mman_ss_tib <- suppressMessages(suppressWarnings(lapply(file_list, readr::read_csv) )) %>% 
   dplyr::bind_rows()
 # Remove Unescessary Fields::
@@ -364,38 +364,18 @@ exp_ss_tibs <- ann_ss_tib %>%
 #                            Plot Beta Matrix::
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 
-# TBD:: Test which gives better seperation of good/med/bad samples::
-# exp_ss_tibs %>% dplyr::arrange(-CG_inf_negs_pval_PassPerc) %>% dplyr::select(CG_inf_negs_pval_PassPerc) %>% as.data.frame()
-# exp_ss_tibs %>% dplyr::arrange(-CG_inf_poob_pval_PassPerc) %>% dplyr::select(CG_inf_poob_pval_PassPerc) %>% as.data.frame()
-
 # For now use standard...
 ss_sam_tib <- exp_ss_tibs %>% dplyr::arrange(-CG_inf_negs_pval_PassPerc) %>% split(.$Sample_Name)
 
 ss_sam_tib <- exp_ss_tibs %>% dplyr::arrange(-CG_RNDI_poob_pval_PassPerc) %>% split(.$Sample_Name)
 cat(glue::glue("[{par$prgmTag}]: Starting Cross Sample Experiment Comparison(linear).{RET}"))
 
-
-# tname <- 'plotBetaMatrix_bySample_Raw'
 for (sample in names(ss_sam_tib)) {
-  # sample <- 'HELA'
-  # ret_dat <- plotBetaMatrix_bySample(tib=ss_sam_tib, sample=sample, field='Beta', minPval=opt$poobMinPval, 
-  #                                    manifest=man_des_tib, outDir=opt$outDir, 
-  
-
-  # Dec12 Version::
-  # ret_dat <- plotBetaMatrix_bySample(tib=ss_sam_tib, sample=sample, minPval=opt$minPval, 
-                                     
-  # Jan7 Version::
-  #   ret_dat <- plotBetaMatrix_bySample(tib=ss_sam_tib, sample=sample, field='Beta', minPval=opt$minPval, 
-
-  # sample <- 'MCF7'
-  sample <- 'HELA'
   ret_dat <- plotBetaMatrix_bySample(tib=ss_sam_tib, sample=sample, field='Beta', minPval=opt$minPval, 
                                      manifest=man_tib, outDir=opt$outDir, 
                                      spread=opt$plotSpread, outType=opt$plotType, dpi=opt$dpi, format=opt$plotFormat,
                                      max=2, maxCnt=opt$plotSub,
                                      verbose=opt$verbosity+1,vt=0)
-  # ret_dat
   if (opt$single) break
 }
 

@@ -102,7 +102,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     #                     'Dye-Swap-Noob' Order of Operations::
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-    if (TRUE) {
+    if (FALSE) {
       sCalls <- c('dyeBiasCorrTypeINorm', 'inferTypeIChannel', 'noob')
       nCalls <- c(FALSE, TRUE,  TRUE)
       pCalls <- c(FALSE, TRUE,  TRUE)
@@ -122,7 +122,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     #                  SwapOpen:: 'Swap-Noob-Dye' Order of Operations::
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-    if (TRUE) {
+    if (FALSE) {
       sCalls <- c('inferTypeIChannel','noob','dyeBiasCorrTypeINorm')
       
       nCalls <- c(TRUE,  FALSE, TRUE)
@@ -145,7 +145,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Building 'OpenSesame'.{RET}"))
     
-    if (TRUE) {
+    if (FALSE) {
       # NOTES: This is what OpenSesame does. The main difference is extracting detection p-values first. 
       #
       core_oo_str  <- 'RNDI'
@@ -169,6 +169,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
       iCalls <- c(FALSE, FALSE, TRUE)
       fCalls <- c(FALSE, TRUE,  FALSE)
     }
+    requeue_key  <- paste('CG',core_oo_str,'negs_pval_PassPerc', sep=del)
     core_oo_beta <- paste(core_oo_str,'beta',sep=del)
     core_oo_negs <- paste(core_oo_str,'negs','pval',sep=del)
     core_oo_poob <- paste(core_oo_str,'poob','pval',sep=del)
@@ -229,8 +230,6 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
           purrr::set_names(paste0('CG_',names(.),'_Beta') )
       )
     
-    if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Summarizing All Signal Data.{RET}"))
-    
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     #                        Summarize Sample Intensities::
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
@@ -272,6 +271,14 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
           purrr::set_names( stringr::str_remove(names(.), '^(II)_') )
       ) %>% dplyr::select(starts_with('cg_'), starts_with('ch_'), starts_with('rs_'), everything())
     )
+
+    pass_str <- 'PASSED'
+    fail_str <- paste0('FAILED_',requeue_key,'<',opt$negsMinCutoff)
+    requeue_key <- requeue_key %>% rlang::sym()
+    samp_sum_tib <- samp_sum_tib %>% dplyr::mutate(Requeue=case_when(
+      !!requeue_key < opt$negsMinCutoff ~ fail_str,
+      TRUE ~ pass_str
+    )) %>% dplyr::select(Requeue, everything())
     
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     #                               Write Outputs::

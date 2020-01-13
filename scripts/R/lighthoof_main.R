@@ -73,8 +73,7 @@ opt$autoDetect <- FALSE
 opt$minPval    <- 0.02
 opt$minDelta   <- 0.2
 
-opt$auto_beta_field <- 'inf_noob_dye_beta'
-opt$auto_pval_field <- 'inf_negs_pval'
+opt$negsMinCutoff   <- 96
 opt$sigs_sum_field  <- 'avg'
 
 # Parallel/Cluster Parameters::
@@ -204,10 +203,8 @@ if (args.dat[1]=='RStudio') {
     make_option(c("--minDelta"), type="double", default=opt$minDelta, 
                 help="Minimum passing delta-beta. Used in AutoSampleSheet cacluclations [default= %default]", metavar="double"),
     
-    make_option(c("--auto_beta_field"), type="character", default=opt$auto_beta_field, 
-                help="Auto-Sample Detection beta field [default= %default]", metavar="character"),
-    make_option(c("--auto_pval_field"), type="character", default=opt$auto_pval_field, 
-                help="Auto-Sample Detection p-val field [default= %default]", metavar="character"),
+    make_option(c("--negsMinCutoff"), type="double", default=opt$negsMinCutoff, 
+                help="Minimum passing detection p-value percentage of probes used to call requeue of sample from provider [default= %default]", metavar="double"),
     make_option(c("--sigs_sum_field"), type="character", default=opt$sigs_sum_field, 
                 help="Signal summary field in AutoSampleSheet [default= %default]", metavar="character"),
     
