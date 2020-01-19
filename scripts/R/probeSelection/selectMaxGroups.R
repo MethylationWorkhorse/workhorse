@@ -31,7 +31,8 @@ num_workers <- getDoParWorkers()
 opt <- NULL
 opt$prgmTag  <- 'selectMaxGroups'
 opt$manDir   <- '/Users/bbarnes/Documents/Projects/manifests/methylation'
-opt$topDir   <- '/Users/bbarnes/Documents/Projects/workhorse'
+# opt$topDir   <- '/Users/bbarnes/Documents/Projects/workhorse'
+opt$topDir   <- '/Users/bbarnes/Documents/Projects/workhorse/git/workhorse'
 opt$sesDir   <- '/Users/bbarnes/Documents/Projects/darkmatter/Projects/sesamize'
 opt$ssSrcDir <- file.path(opt$sesDir, 'sampleSheets/official')
 opt$datDir   <- file.path(opt$topDir, 'dat')
@@ -101,6 +102,9 @@ if (file.exists(man.grp.rds)) {
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 
 ss.curated.tib <- getCurratedHumanSampleSheet(opt=opt, verbose=opt$verbosity)
+
+ss_curated_csv <- '/Users/bbarnes/Documents/Projects/workhorse/sampleSheets/EPIC-B4.SampleSheets.n4331.Dec1-2019.csv.gz'
+ss_curated_tib <- readr::read_csv(ss_curated_csv)
 
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 #                      Load all Auto-SampleSheets and 
