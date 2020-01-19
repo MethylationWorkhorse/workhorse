@@ -53,6 +53,8 @@ sesameWorkflow = function(sset=NULL, add, call, sigs, pheno, beadPool=NULL,
     sabr <- ''
     step_cnt <- length(stepCalls)
     for (ii in seq(1:step_cnt)) {
+      # AnnotationHub(proxy='127.0.0.1:10801')
+      
       step <- stepCalls[ii]
       sabr <- paste0(sabr, sesameStepAbbreviation(step) )
       
@@ -129,8 +131,18 @@ sesameWorkflow = function(sset=NULL, add, call, sigs, pheno, beadPool=NULL,
                                    !!sexKaryo_str  := sexKaryo,
                                    !!ethnicity_str := ethnicity
                                    )
-
+        
+        cat("\nBEG::phen_tib:\n")
+        print(phen_tib)
+        cat("\nEND:: phen_tib:\n")
+        
         pheno <- pheno %>% dplyr::bind_cols(phen_tib)
+        
+        cat("\n\nBEG:: Beta\n\n")
+        print(beta %>% head)
+        cat("\n\nBEG:: PHENO\n\n")
+        print(phen_tib)
+        cat("\n\nEND:: PHENO\n\n")
       }
     }
     
@@ -140,7 +152,8 @@ sesameWorkflow = function(sset=NULL, add, call, sigs, pheno, beadPool=NULL,
   
   # list(sset, call, sigs)
   # list(call, sigs, pheno)
-  list(call, sigs, pheno)
+  # list(call, sigs, pheno)
+  list(call, sigs, pheno, sset)
 }
 
 initSesameRaw = function(prefix, platform, manifest, verbose=0,vt=3,tc=1,tt=NULL) {
@@ -328,6 +341,24 @@ safePhenoAge = function(beta, verbose=0,vt=3,tc=1,tt=NULL) {
 }
 
 safeGCT = function(sset, verbose=0,vt=3,tc=1,tt=NULL) {
+  funcTag <- 'safeGCT'
+  tabsStr <- paste0(rep(TAB, tc), collapse='')
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Starting...{RET}"))
+  
+  stime <- system.time({
+    val <- NA
+    try_str <- 'pass'
+    
+    try(val <- sesame::bisConversionControl(sset), silent = TRUE)
+    if (is.na(val)) try_str <- 'fail'
+  })
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Value={val}, try_str={try_str}. Done.{RET}{RET}"))
+  if (!is.null(tt)) tt$addTime(stime,funcTag)
+  
+  val
+}
+
+safeGCT_org = function(sset, verbose=0,vt=3,tc=1,tt=NULL) {
   funcTag <- 'safeGCT'
   tabsStr <- paste0(rep(TAB, tc), collapse='')
   if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Starting...{RET}"))

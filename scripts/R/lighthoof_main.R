@@ -10,12 +10,14 @@ suppressWarnings(suppressPackageStartupMessages(require("optparse",quietly=TRUE)
 suppressWarnings(suppressPackageStartupMessages(require("tidyverse")) )
 suppressWarnings(suppressPackageStartupMessages(require("stringr")) )
 suppressWarnings(suppressPackageStartupMessages(require("glue")) )
-# suppressWarnings(suppressPackageStartupMessages(require("scales")) )
+suppressWarnings(suppressPackageStartupMessages(require("scales")) )
 suppressWarnings(suppressPackageStartupMessages(require("matrixStats")) )
-# suppressWarnings(suppressPackageStartupMessages(require("grid")) )
+suppressWarnings(suppressPackageStartupMessages(require("grid")) )
 
 # Parallel Computing Packages
 suppressWarnings(suppressPackageStartupMessages(require("doParallel")) )
+
+# AnnotationHub(proxy='127.0.0.1:10801')
 
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 #                              Global Params::
@@ -100,7 +102,7 @@ args.dat <- commandArgs(trailingOnly = FALSE)
 if (args.dat[1]=='RStudio') {
   
   par$runMode    <- args.dat[1]
-  par$dirRelPath <- file.path(par$macDir, 'git/workhorse/scripts')
+  par$dirRelPath <- file.path(par$macDir, 'workhorse/scripts')
   par$prgmTag    <- 'lighthoof_main'
   par$exeLocPath <- file.path(par$dirRelPath, 'R', paste0(par$prgmTag,'.R'))
   
@@ -131,6 +133,10 @@ if (args.dat[1]=='RStudio') {
   opt$expRunStr  <- 'BadDELTA'
   opt$expChipNum <- '203319730003'
   opt$idatsDir <- file.path(par$topDir, paste('idats', opt$expRunStr, sep='_') )
+
+  opt$expRunStr  <- 'DeltaBetaCore'
+  opt$expChipNum <- '202761400007'
+  opt$idatsDir <- '/Users/bbarnes/Documents/Projects/workhorse/idats_DeltaBetaCore'
   
   opt$outDir   <- file.path(par$topDir, 'workspace', par$prgmTag, opt$expRunStr)
 
@@ -145,6 +151,8 @@ if (args.dat[1]=='RStudio') {
   # opt$idatsDir <- file.path(par$topDir, 'idats_refs')
   
   par$retData <- TRUE
+  
+  opt$verbosity <- 4
   
 } else {
   par$runMode    <- 'CommandLine'
@@ -389,6 +397,11 @@ if (opt$cluster) {
     for (prefix in names(chipPrefixes)) {
       # chipTimes[[prefix]] <-
       #   sesamizeSingleSample(prefix=chipPrefixes[[prefix]], man=man_tib, add=add_tib, autoRef=auto_can_tib, opt=opt, retData=par$retData)
+      
+      # AnnotationHub( hub=getAnnotationHubOption("URL"),
+      #                cache=getAnnotationHubOption("CACHE"),
+      #                proxy=getAnnotationHubOption("PROXY"),
+      #                localHub=FALSE)
       
       rdat <- sesamizeSingleSample(prefix=chipPrefixes[[prefix]], man=man_tib, add=add_tib, autoRef=auto_sam_tib, opt=opt, retData=par$retData)
 

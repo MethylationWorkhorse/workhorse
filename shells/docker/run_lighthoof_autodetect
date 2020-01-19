@@ -1,5 +1,5 @@
 #!/bin/sh
-/usr/bin/Rscript /repo/workhorse/scripts/R/lighthoof_main.R --Rscript /usr/bin/Rscript \
+/usr/local/bin/Rscript /repo/workhorse/scripts/R/lighthoof_main.R --Rscript /usr/local/bin/Rscript \
     -i . -o /output --datDir /repo/workhorse/dat \
     --platform=EPIC --manifest=B4 --minPval=0.02 \
     --autoDetect \

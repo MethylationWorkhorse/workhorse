@@ -177,11 +177,11 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     ses_data <- sesameWorkflow(sset=raw_sset, add=add, call=call_tib, sigs=sigs_tib, pheno=phen_sum_tib, beadPool=beadPool,
                                stepCalls=sCalls, negsCalls=nCalls,poobCalls=pCalls, betaCalls=bCalls, intsCalls=iCalls, fenoCalls=fCalls,
                                verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tTracker)
-
+    
     call_tib <- ses_data[[1]]
     sigs_tib <- ses_data[[2]]
     phen_sum_tib <- ses_data[[3]]
-    # sset_ret <- ses_data[[4]] # For Development Mode...
+    sset_ret <- ses_data[[4]] # For Development Mode...
     
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     #                            Build Sample Sheet::
@@ -311,7 +311,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
   if (retData) {
     ret <- NULL
     ret$idat   <- idat$sig
-    # ret$sset   <- sset_ret
+    ret$sset   <- sset_ret
     
     ret$call   <- call_tib
     ret$sigs   <- sigs_tib
@@ -789,7 +789,7 @@ sampleDetect = function(can, ref, minPval, minDelta, dname, pname, ptype=NULL,
     dbm <- deltaMatrix(mat, minDelta=minDelta, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
     dbm_tib <- dbm %>% tibble::as_tibble(rownames='Sample')
     
-    cat("Building sss r2m/dbm:\n")
+    # cat("Building sss r2m/dbm:\n")
     sss <- dplyr::bind_cols(
       r2m_tib %>% head(n=1) %>% dplyr::select(-Sample) %>% 
         tidyr::gather(key='Sample', value='r2') %>% 
