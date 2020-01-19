@@ -93,17 +93,8 @@ CMD+=" --"verbosity=${verbosity}
 # mkdir -p ${outDir}
 echo ${CMD}
 
-${CMD}
+exit
 
-# ${RSCRIPT} ${EXE} \
-#     --Rscript=${RSCRIPT} \
-#     --outDir=${OUT} \
-#     --datDir=${DAT} \
-#     --idatsDir=${IDAT} \
-#     --platform=${platform} \
-#     --manifest=${manifest} \
-#     --parallel \
-#     --cluster \
-#     -v ${VER}
+${CMD}
 
 ## End of file

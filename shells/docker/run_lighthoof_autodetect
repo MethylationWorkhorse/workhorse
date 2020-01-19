@@ -1,0 +1,6 @@
+#!/bin/sh
+/usr/bin/Rscript /repo/workhorse/scripts/R/lighthoof_main.R --Rscript /usr/bin/Rscript -i . -o /output --datDir /repo/workhorse/dat --platform=EPIC --manifest=B4 --minPval=0.02 --cluster  --parallel --autoDetect --writeCall --writeAuto --verbosity=4
+
+
+
+# End of file
