@@ -93,8 +93,6 @@ CMD+=" --"verbosity=${verbosity}
 # mkdir -p ${outDir}
 echo ${CMD}
 
-exit
-
 ${CMD}
 
 ## End of file
