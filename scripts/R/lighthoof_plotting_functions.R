@@ -11,185 +11,31 @@ suppressWarnings(suppressPackageStartupMessages(require("GGally")) )
 suppressWarnings(suppressPackageStartupMessages(require("hexbin")) )
 
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-#                        Sample Sheet I/O Methods::
+#                   Per CpG Screening/Summary Functions::
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-
-loadAutoSampleSheets = function(dir, platform, manifest, suffix='AutoSampleSheet.csv.gz', 
-                                addSampleName=FALSE, addPaths=FALSE,
-                                
-                                pvalDetectFlag=TRUE, pvalDetectMinKey='CG_NDI_negs_pval_PassPerc', pvalDetectMinVal=96,
-                                
-                                flagSampleDetect=TRUE, filterRef=FALSE,
-                                dbMin=90, r2Min=0.9,
-                                dbKey='AutoSample_dB_Key', r2Key='AutoSample_R2_Key',
-                                dbVal='AutoSample_dB_Val', r2Val='AutoSample_R2_Val',
-                                verbose=0,vt=3,tc=1,tt=NULL) {
-  funcTag <- 'loadAutoSampleSheets'
+getLociSampleSummary = function(tib, id='Probe_ID', max=NULL,
+                                field=NULL, minKey=NULL, minVal=NULL, verbose=0,vt=3,tc=1,tt=NULL) {
+  funcTag <- 'getLociSampleSummary'
   tabsStr <- paste0(rep(TAB, tc), collapse='')
-  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Starting, dir={dir}.{RET}"))
-
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Masking {field} with {minKey} at {minVal}.{RET}"))
+  if (!is.null(max)) tib <- tib %>% head(n=max)
+  
   stime <- system.time({
-    dat <- NULL
+    sam_tib <- tib %>% dplyr::select(-id) %>% names() %>% stringr::str_remove('_.*$') %>% 
+      tibble::enframe() %>% dplyr::group_by(value) %>% summarise(Count=n())
+    sam_vec <- sam_tib %>% dplyr::pull(1) %>% as.vector()
+    cnt_vec <- sam_tib %>% dplyr::pull(2) %>% as.vector()
+    cpg_vec <- tib %>% dplyr::pull(1) %>% as.vector()
+    sam_mat <- tib %>% dplyr::select(-id) %>% as.matrix()
+    sum_mat <- C_lociRSquared(sam_mat, cnt_vec, sam_vec)
     
-    dbKey <- dbKey %>% rlang::sym()
-    dbVal <- dbVal %>% rlang::sym()
-    r2Key <- r2Key %>% rlang::sym()
-    r2Val <- r2Val %>% rlang::sym()
-    
-    pvalDetectMinKey <- pvalDetectMinKey %>% rlang::sym()
-    # pvalDetectMinVal <- pvalDetectMinVal %>% rlang::sym()
-
-    pattern <- paste(platform,manifest,suffix, sep='.')
-    auto_ss_list <- list.files(dir, pattern=pattern, recursive=TRUE, full.names=TRUE)
-    auto_ss_llen <- auto_ss_list %>% length()
-    if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Starting, SampleSheetCount={auto_ss_llen}{RET}"))
-    
-    # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-    #  Load Samples::
-    auto_ss_tibs <- suppressMessages(suppressWarnings(lapply(auto_ss_list, readr::read_csv) )) %>% 
-      dplyr::bind_rows() # %>% 
-    #  addBeadPoolToSampleSheet(field='CG_Loci_Count', verbose=verbose,vt=vt+1,tc=tc+1)
-    auto_ss_tlen <- base::nrow(auto_ss_tibs)
-    if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} SampleSheetNrows(bPool)={auto_ss_tlen}{RET}"))
-    
-    # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-    #  Add General Sample Name Field::
-    if (addSampleName) {
-      auto_ss_tibs <- auto_ss_tibs %>% dplyr::mutate(Sample_Name=!!dbKey) %>%
-        dplyr::select(Sample_Name, dplyr::everything())
-    }
-    
-    # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-    #  Flag Probe Detected (pval)::
-    if (pvalDetectFlag && !is.null(pvalDetectMinKey) && !is.null(pvalDetectMinVal)) {
-      fail_tag <- paste0("Failed<",pvalDetectMinVal)
-      pass_tag <- paste0("Passed>=",pvalDetectMinVal)
-      
-      auto_ss_tibs <- auto_ss_tibs %>% dplyr::mutate(detectPval=case_when(
-        !!pvalDetectMinKey < !!pvalDetectMinVal ~ fail_tag,
-        TRUE ~ pass_tag)
-      )
-    }
-    
-    # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-    #  Flag Auto-Detected Samples::
-    if (flagSampleDetect) {
-      fail_r2  <- paste0('Failed_r2<',r2Min)
-      fail_db  <- paste0('Failed_db<',dbMin)
-      fail_mt  <- paste0('Failed_r21-db')
-      pass_tag <- 'Passed'
-      
-      auto_ss_tibs <- auto_ss_tibs %>% dplyr::mutate(detectedSample=case_when(
-        !!r2Val < r2Min ~ fail_r2,
-        !!dbVal < dbMin ~ fail_db,
-        !!dbKey != !!r2Key ~ fail_mt,
-        TRUE ~ pass_tag)
-      )
-    }
-    
-    if (filterRef) {
-      auto_ss_tibs <- auto_ss_tibs %>% dplyr::filter() %>% dplyr::filter(!!dbVal >= dbMin) %>% dplyr::filter(!!r2Val >= r2Min)
-      auto_ss_flen <- base::nrow(auto_ss_tibs)
-      if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} SampleSheetNrows(paths)={auto_ss_flen}{RET}"))
-
-      # Remove Unidentifiable
-      # if (rmOdd) auto_ss_tibs <- auto_ss_tibs %>% dplyr::filter(Bead_Pool!='Odd')
-    }
-    
-    # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-    #  Add Paths::
-    if (addPaths) {
-      auto_ss_tibs <- auto_ss_tibs %>%
-        addPathsToSampleSheet(dir=dir, platform=platform, manifest=manifest, 
-                              field='Calls_Path', suffix='call.csv.gz$', verbose=verbose)
-      
-      #  # addPathsToSampleSheet(dir=dir, platform=platform, field='ProbesI_CSV_Path',  suffix='both.ProbesI.tib.csv.gz$', verbose=verbose) %>%
-      #  # addPathsToSampleSheet(dir=dir, platform=platform, field='ProbesII_CSV_Path', suffix='both.ProbesII.tib.csv.gz$', verbose=verbose) %>%
-      #   addPathsToSampleSheet(dir=dir, platform=platform, field='Probes_RDS_Path',   suffix='both.Probes.tib.rds$', verbose=verbose)
-      auto_ss_tlen <- base::nrow(auto_ss_tibs)
-      if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} SampleSheetNrows(paths)={auto_ss_tlen}{RET}"))
-    }
-    
-    dat <- auto_ss_tibs
+    id <- id %>% rlang::sym()
+    sum_tib <- sum_mat %>% tibble::as_tibble() %>% tibble::add_column(!!id := cpg_vec) %>% dplyr::select(!!id, everything())
   })
   if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Done.{RET}{RET}"))
   if (!is.null(tt)) tt$addTime(stime,funcTag)
-
-  dat
-}
-
-# ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-#                     Sample Sheet Manipulation Methods::
-# ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-
-getUniqueFields = function(ss, keys, verbose=0,vt=1,tc=1) {
-  funcTag <- 'getUniqueFields'
-  tabsStr <- paste0(rep(TAB, tc), collapse='')
   
-  # Remove Variables with a single value
-  uniq_exp_tib <- ss %>% dplyr::select(keys) %>% 
-    # dplyr::summarise_each(list(n_distinct) ) %>% 
-    dplyr::summarise_all(list(n_distinct) ) %>% 
-    tidyr::gather() %>% dplyr::filter(value>1) %>%
-    dplyr::arrange(value) %>% 
-    tidyr::spread(key, value)
-  
-  uniq_exp_keys <- uniq_exp_tib %>% names()
-  
-  # Special Treatment for ChipFormat (put in front)
-  field <- 'ChipFormat'  
-  isPresent <- grep(field, uniq_exp_keys) %>% length() > 0
-  if (isPresent)
-    uniq_exp_tib <- uniq_exp_tib %>% dplyr::select(field, everything())
-  
-  # Special Treatment for Bead_Pool (put in last)
-  field <- 'Bead_Pool'  
-  isPresent <- grep(field, uniq_exp_keys) %>% length() > 0
-  if (isPresent)
-    uniq_exp_tib <- uniq_exp_tib %>% dplyr::select(-field, everything())
-  
-  uniq_exp_keys <- uniq_exp_tib %>% names()
-  
-  uniq_exp_keys
-}
-
-addPathsToSampleSheet = function(ss, dir, platform, manifest, field, suffix, del='.',
-                                 verbose=0,vt=1,tc=1) {
-  funcTag <- 'addRdsPathsToSampleSheet'
-  
-  pattern=paste(platform,manifest,suffix, sep=del)
-  file_list <- NULL
-  file_list <- list.files(dir, pattern=pattern, recursive=TRUE, full.names=TRUE)
-  if (length(file_list)==0) file_list <- NULL
-  
-  # TBD:: Clean up code below!!!
-  ss_path_tibs <- tibble::tibble(Sentrix_Name=basename(file_list) %>% 
-                                   str_remove(paste('',opt$platform,'.*$', sep=del)), 
-                                 !!field := file_list)
-  
-  tib <- ss_path_tibs %>%
-    dplyr::distinct(Sentrix_Name, .keep_all=TRUE) %>% 
-    dplyr::inner_join(ss, by="Sentrix_Name")
-  
-  tib
-}
-
-addBeadPoolToSampleSheet = function(ss, field, verbose=0, vt=1, tc=1) {
-  funcTag <- 'addBeadPoolToSampleSheet'
-  
-  field <- field %>% rlang::sym()
-  ss <- ss %>% dplyr::mutate(
-    Bead_Pool=case_when(!!field >862926+1000 ~ 'EPIC_Plus',
-                        !!field >862926-1000 ~ 'EPIC',
-                        !!field >612329-1000 ~ 'BP1234',
-                        !!field >448696-1000 ~ 'BP123',
-                        !!field >148977-1000 ~ 'BP2',
-                        !!field >103113-1000 ~ 'Odd',
-                        !!field<=103113-1000 ~ 'UNK',
-                        TRUE ~ NA_character_) ) %>%
-    dplyr::select(Bead_Pool, everything())
-  
-  ss
+  sum_tib
 }
 
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
@@ -198,18 +44,16 @@ addBeadPoolToSampleSheet = function(ss, field, verbose=0, vt=1, tc=1) {
 #
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 
-
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 #                            Clean Functions::
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 
-selectSamples = function(ss, max=3, spread='mid', sort='CG_inf_negs_pval_PassPerc',
-                         verbose=0,vt=4,tc=1,tabsStr='') {
+selectSamples = function(ss, max=3, spread='mid', sort='CG_NDI_negs_pval_PassPerc',
+                         verbose=0,vt=4,tc=1) {
   funcTag <- 'selectSamples'
   tabsStr <- paste0(rep(TAB, tc), collapse='')
   if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} max={max}, sort={sort}{RET}"),sep='')
-  max=3
-  
+
   nrows <- ss %>% base::nrow()
   # Arrange by variable
   sort <- rlang::sym(sort)
@@ -242,7 +86,8 @@ selectSamples = function(ss, max=3, spread='mid', sort='CG_inf_negs_pval_PassPer
   ss_sel
 }
 
-loadSampleRDS_byRep = function(ss, exp=NULL, minPval, parallel=FALSE, verbose=0,vt=3,tc=1) {
+loadSampleRDS_byRep = function(ss, exp=NULL, minPval, pvalKey, betaKey,
+                               parallel=FALSE, verbose=0,vt=3,tc=1) {
   funcTag <- 'loadSampleRDS_byRep'
   tabsStr <- paste0(rep(TAB, tc), collapse='')
   
@@ -255,7 +100,8 @@ loadSampleRDS_byRep = function(ss, exp=NULL, minPval, parallel=FALSE, verbose=0,
     exp_name <- prefix
     if (!is.null(exp)) exp_name <- paste(exp,exp_name, sep='.')
     prb_tib <- loadProbeRDS(ss_split[[prefix]]$Calls_Path, minPval=minPval, 
-                            prefix=exp_name, verbose=verbose, vt=vt, tc=tc+1)
+                            pvalKey=pvalKey, betaKey=betaKey, prefix=exp_name, 
+                            verbose=verbose, vt=vt, tc=tc+1)
     cur_tibs[[prefix]] <- prb_tib
   }
   
@@ -271,8 +117,7 @@ loadSampleRDS_byRep = function(ss, exp=NULL, minPval, parallel=FALSE, verbose=0,
   join_tib
 }
 
-loadProbeRDS = function(file, minPval=NULL, prefix=NULL, 
-                        pvalKey='inf_negs_pval', betaKey='inf_noob_dye_beta',
+loadProbeRDS = function(file, minPval=NULL, prefix=NULL, pvalKey, betaKey,
                         verbose=0,vt=3,tc=1) {
   funcTag <- 'loadProbeRDS'
   tabsStr <- paste0(rep(TAB, tc), collapse='')
@@ -299,7 +144,7 @@ loadProbeRDS = function(file, minPval=NULL, prefix=NULL,
     
     tib <- maskTib(tib, field=betaKey, pval=pvalKey, minPval=minPval, verbose=verbose) %>%
       dplyr::rename(Beta=!!betaKey)
-      
+
     #  dplyr::rename(Pval=!!pvalKey, Beta=!!betaKey)
     # print(tib)
     # mask_idx <- which(tib$NegsDetP>minPval)
@@ -322,8 +167,10 @@ loadProbeRDS = function(file, minPval=NULL, prefix=NULL,
 #                Plotting Functions for Pairwise Comparison::
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 
-plotBetaMatrix_bySample = function(tib, sample, manifest, minPval, outDir, field='Beta', join='Probe_ID',
+plotBetaMatrix_bySample = function(tib, sample, manifest, minPval, pvalKey, betaKey,
+                                   outDir, field='Beta', join='Probe_ID',
                                    max=3, spread='mid', outType='auto', dpi=72, format='png', maxCnt=30000,
+                                   retTibs=FALSE,
                                    verbose=0,vt=4,tc=1) {
   funcTag <- 'plotBetaMatrix_bySample'
   tabsStr <- paste0(rep(TAB, tc), collapse='')
@@ -346,10 +193,12 @@ plotBetaMatrix_bySample = function(tib, sample, manifest, minPval, outDir, field
     loadRDS  <- TRUE
     loadIDAT <- FALSE
     if (exp_nrows>1) {
-      ss_exp_tibs[[exp_key]]  <- selectSamples(ss_exp_tibs[[exp_key]], max=max, spread=spread, sort='CG_inf_negs_pval_PassPerc',
+      ss_exp_tibs[[exp_key]]  <- selectSamples(ss_exp_tibs[[exp_key]], max=max, spread=spread, sort='CG_NDI_negs_pval_PassPerc',
                                                verbose=verbose,vt=vt,tc=tc+1)
       if (loadRDS)
-        prbs_exp_tibs[[exp_key]] <- loadSampleRDS_byRep(ss=ss_exp_tibs[[exp_key]], exp=exp_key, minPval=minPval, verbose=verbose+9,vt=vt+1,tc=tc+1)
+        prbs_exp_tibs[[exp_key]] <- loadSampleRDS_byRep(ss=ss_exp_tibs[[exp_key]], exp=exp_key, 
+                                                        minPval=minPval, pvalKey=pvalKey, betaKey=betaKey,
+                                                        verbose=verbose+9,vt=vt+1,tc=tc+1)
       
       if (loadIDAT)
         idat_exp_tibs[[exp_key]] <- loadSampleIDAT_byRep(ss=ss_exp_tibs[[exp_key]], exp=exp_key, verbose=verbose+9,vt=vt+1,tc=tc+1)
@@ -357,11 +206,13 @@ plotBetaMatrix_bySample = function(tib, sample, manifest, minPval, outDir, field
   }
   if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Loaded ALL Experimental Probe Data!{RET}{RET}"))
   
-  # ret <- NULL
-  # ret$ss_exp_tibs   <- ss_exp_tibs
-  # ret$prbs_exp_tibs <- prbs_exp_tibs
-  # # ret$idat_exp_tibs <- idat_exp_tibs
-  # return(ret)
+  if (retTibs) {
+    ret <- NULL
+    ret$ss_exp_tibs   <- ss_exp_tibs
+    ret$prbs_exp_tibs <- prbs_exp_tibs
+    # ret$idat_exp_tibs <- idat_exp_tibs
+    return(ret)
+  }
   
   # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
   #  Plot Sample Probe Data
@@ -396,10 +247,12 @@ plotBetaMatrix_bySample = function(tib, sample, manifest, minPval, outDir, field
           #                                  manifest=manifest, field=field, join=join,
           #                                  verbose=verbose, vt=vt+1, tc=tc+1)
           
-          field_str <- 'inf_noob_dye_beta'
-          detP_str <- 'inf_negs_pval'
+          # TBD::Ensure removing these and replacing with parameter variables is OK???
+          # field_str <- 'NDI_beta' # betaKey
+          # detP_str <- 'NDI_negs_pval' # pvalKey
           gg <- plotPairs(join_prbs, sample=sample, nameA=nameA, nameB=nameB, outDir=sam_dir,
-                          probeType='cg', field=field, field_str=field_str, detp=detP_str, maxCnt=maxCnt, minPval=minPval,
+                          probeType='cg', field=field, field_str=betaKey, detp=pvalKey, maxCnt=maxCnt, minPval=minPval,
+                          # probeType='cg', field=field, field_str=field_str, detp=detP_str, maxCnt=maxCnt, minPval=minPval,
                           spread=spread, outType=outType, dpi=dpi, format=format,
                           verbose=verbose, tc=tc+1)
           
@@ -586,7 +439,7 @@ diag_density <- function(data, mapping, fdat=NULL, group, minPval, only, field='
 
 geomDensity1d_Delta <- function(data, mapping, fdat=NULL, bufs=NULL, group, minDelta, only=NULL,
                                 alpha=0.8,alpha_lab=0.3,size=0.5,wsize=3, ticks=3,
-                                verbose=0,vt=4,tc=1,tabsStr='') {
+                                verbose=0,vt=4,tc=1) {
   funcTag <- 'geomDensity1d_Delta'
   tabsStr <- paste0(rep(TAB, tc), collapse='')
   
@@ -651,7 +504,7 @@ geomDensity1d_Delta <- function(data, mapping, fdat=NULL, bufs=NULL, group, minD
 geomDensity2d_RSquared <- function(data, mapping, fdat=NULL, group, only=NULL,
                                    alpha=0.8,alpha_lab=0.3,size=0.5,wsize=3, 
                                    x_min=0,x_max=1,y_min=0,y_max=1,ticks=3,
-                                   verbose=0,vt=4,tc=1,tabsStr='') {
+                                   verbose=0,vt=4,tc=1) {
   funcTag <- 'geomDensity2d_RSquared'
   tabsStr <- paste0(rep(TAB, tc), collapse='')
   
@@ -695,7 +548,7 @@ geomDensity2d_RSquared <- function(data, mapping, fdat=NULL, group, only=NULL,
   gg
 }
 
-getDeltaMaxXY = function(data, datIdx=2, verbose=0,vt=4,tc=1,tabsStr='') {
+getDeltaMaxXY = function(data, datIdx=2, verbose=0,vt=4,tc=1) {
   funcTag <- 'getDeltaMaxXY'
   tabsStr <- paste0(rep(TAB, tc), collapse='')
   
@@ -741,7 +594,7 @@ getDeltaMaxXY = function(data, datIdx=2, verbose=0,vt=4,tc=1,tabsStr='') {
 #                             General Methods::
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 sampleGroup_n = function(tib, n, field,
-                         verbose=0,vt=4,tc=1,tabsStr='') {
+                         verbose=0,vt=4,tc=1) {
   funcTag <- 'sampleGroup_n'
   tabsStr <- paste0(rep(TAB, tc), collapse='')
   
@@ -776,7 +629,7 @@ number_as_commaK <- function(value, cutoff=10000) {
 }
 
 getSummaryLabel = function(tib, pad=' ', group, field, minVal=NULL, rm.tot=FALSE,
-                           verbose=0,vt=4,tc=1,tabsStr='') {
+                           verbose=0,vt=4,tc=1) {
   funcTag <- 'getSummaryLabel'
   tabsStr <- paste0(rep(TAB, tc), collapse='')
   

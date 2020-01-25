@@ -1,13 +1,13 @@
 #!/bin/sh
-/usr/local/bin/Rscript /repo/workhorse/scripts/R/lighthoof_main.R --Rscript /usr/local/bin/Rscript \
+/usr/bin/Rscript /repo/workhorse/scripts/R/lighthoof_main.R --Rscript /usr/bin/Rscript \
     -i . -o /output --datDir /repo/workhorse/dat \
     --platform=EPIC --manifest=B4 --minPval=0.02 \
     --autoDetect \
     --writeAuto \
-    --single \
+    --parallel \
     --verbosity=4
 
-#    --parallel \
+#    --single \
 #    --plotAuto \
 #    --writeCall \
 #    --writeSigs \

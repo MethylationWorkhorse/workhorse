@@ -62,7 +62,12 @@ opt$platform  <- 'EPIC'
 opt$manifest  <- 'B4'
 
 # Run Parameters::
+opt$buildSubDir <- FALSE
 opt$sampleSheet <- NULL
+
+opt$DyeSwapNoob <- FALSE
+opt$SwapOpen    <- FALSE
+opt$RawOpen     <- FALSE
 
 opt$writeSigs  <- FALSE
 opt$writeCall  <- FALSE
@@ -110,16 +115,27 @@ if (args.dat[1]=='RStudio') {
   par$topDir   <- par$macDir
   opt$datDir   <- file.path(par$topDir, 'dat')
 
+  opt$buildSubDir <- TRUE
+  opt$DyeSwapNoob <- TRUE
+  opt$SwapOpen    <- TRUE
+  opt$RawOpen     <- TRUE
+  
   opt$writeSigs  <- FALSE
   opt$writeCall  <- TRUE
   opt$writeAuto  <- TRUE
   opt$plotAuto   <- TRUE
-  
+
+  # ----- ----- -----
   # Fast Option::
-  opt$writeCall  <- FALSE
+  #
+  # opt$DyeSwapNoob <- FALSE
+  # opt$SwapOpen    <- FALSE
+  # opt$writeCall   <- FALSE
+  # opt$RawOpen     <- FALSE
   opt$writeAuto  <- FALSE
   opt$plotAuto   <- FALSE
-  
+  # ----- ----- -----
+
   opt$fresh      <- FALSE
   opt$autoDetect <- TRUE
   opt$cluster    <- FALSE
@@ -138,18 +154,8 @@ if (args.dat[1]=='RStudio') {
   opt$expChipNum <- '202761400007'
   opt$idatsDir <- '/Users/bbarnes/Documents/Projects/workhorse/idats_DeltaBetaCore'
   
-  opt$outDir   <- file.path(par$topDir, 'workspace', par$prgmTag, opt$expRunStr)
+  opt$outDir   <- file.path(par$topDir, 'workspace', par$prgmTag, par$runMode, opt$expRunStr)
 
-  if (!opt$cluster) {
-    opt$outDir   <- file.path(opt$outDir, opt$expChipNum)
-    opt$idatsDir <- file.path(opt$idatsDir, opt$expChipNum)
-  }
-  
-  # Auto-Detect idats::
-  # opt$autoDetect <- TRUE
-  # opt$outDir   <- file.path(par$topDir, 'workspace', par$prgmTag, 'autoReference')
-  # opt$idatsDir <- file.path(par$topDir, 'idats_refs')
-  
   par$retData <- TRUE
   
   opt$verbosity <- 4
@@ -188,8 +194,16 @@ if (args.dat[1]=='RStudio') {
                 help="Forced manifest [B1, B2, B4] otherwise auto-detect [default= %default]", metavar="character"),
     
     # Run Parameters::
+    make_option(c("--buildSubDir"), action="store_true", default=opt$buildSubDir,
+                help="Boolean variable to build subdirectories based on Chip/BeadPool (for R&D purposes) [default= %default]", metavar="boolean"),
     make_option(c("--sampleSheet"), type="character", default=opt$sampleSheet, 
                 help="Target Sample Sheet containing samples/chips to ONLY analyze [default= %default]", metavar="character"),
+    make_option(c("--DyeSwapNoob"), action="store_true", default=opt$DyeSwapNoob,
+                help="Add DyeSwapNoob workflow (different order-of-operations) [default= %default]", metavar="boolean"),
+    make_option(c("--SwapOpen"), action="store_true", default=opt$SwapOpen,
+                help="Add SwapOpen workflow (different order-of-operations) [default= %default]", metavar="boolean"),
+    make_option(c("--RawOpen"), action="store_true", default=opt$RawOpen,
+                help="Add RawOpen workflow (different order-of-operations) [default= %default]", metavar="boolean"),
     
     make_option(c("--writeSigs"), action="store_true", default=opt$writeSigs,
                 help="Boolean variable to write Signal file [default= %default]", metavar="boolean"),
@@ -375,6 +389,7 @@ if (opt$cluster) {
   if (opt$autoDetect) {
     pool <- 'BETA'
 
+    # TBD:: Modify into function call to match the two above...
     auto_sam_csv <- file.path(opt$datDir, 'ref', paste('AutoSampleDetection',pool,'Pval-Betas.csv.gz', sep='_'))
     stime <- system.time({
       auto_sam_tib <- suppressMessages(suppressWarnings(readr::read_csv(auto_sam_csv) ))
@@ -389,8 +404,26 @@ if (opt$cluster) {
   chipTimes <- NULL
   
   if (opt$paralle) {
+    funcTag <- 'sesamizeSingleSample'
     chipTimes <- foreach (prefix=names(chipPrefixes), .inorder=T, .final = function(x) setNames(x, names(chipPrefixes))) %dopar% {
-      sesamizeSingleSample(prefix=chipPrefixes[[prefix]], man=man_tib, add=add_tib, autoRef=auto_sam_tib, opt=opt, retData=par$retData)
+      val <- NULL
+      try_str <- ''
+      val = tryCatch({
+        try_str <- 'Pass'
+        sesamizeSingleSample(prefix=chipPrefixes[[prefix]], man=man_tib, add=add_tib, autoRef=auto_sam_tib, opt=opt, retData=par$retData)
+      }, warning = function(w) {
+        try_str <- paste('warning',funcTag, sep='-')
+        NA
+      }, error = function(e) {
+        try_str <- paste('error',funcTag, sep='-')
+        NA
+      }, finally = {
+        try_str <- paste('cleanup',funcTag, sep='-')
+        NA
+      })
+      cat(glue::glue("[{par$prgmTag}] parallelFunc={funcTag}: try_str={try_str}. Done.{RET}{RET}"))
+
+      val
     }
   } else {
     

@@ -38,12 +38,6 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     basecode <- basename(prefix)
     out_name <- paste(basecode, opt$platform, opt$manifest, sep=del)
     
-    call_csv <- file.path(opt$outDir, paste(out_name, 'call.csv.gz', sep=del) )
-    sigs_csv <- file.path(opt$outDir, paste(out_name, 'sigs.csv.gz', sep=del) )
-    samp_csv <- file.path(opt$outDir, paste(out_name, 'AutoSampleSheet.csv.gz', sep=del) )
-    ssum_csv <- file.path(opt$outDir, paste(out_name, 'SignalSummary.csv.gz', sep=del) )
-    time_csv <- file.path(opt$outDir, paste(out_name, 'runTime.csv.gz', sep=del) )
-    
     stampBeg_txt <- file.path(opt$outDir, paste(out_name, 'timestamp.beg.txt', sep=del) )
     stampEnd_txt <- file.path(opt$outDir, paste(out_name, 'timestamp.end.txt', sep=del) )
     system(glue::glue('touch {stampBeg_txt}') )
@@ -90,9 +84,19 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
       purrr::set_names(paste(names(.),'Manifest_Count',sep='_') ) %>% 
       addBeadPoolToSampleSheet(field='CG_Manifest_Count') %>% dplyr::ungroup()
     
+    chipFormat <- NULL
+    chipFormat <- idat$ann %>% dplyr::select(Chip_Format) %>% dplyr::pull()
     beadPool <- NULL
-    beadPool <- pool_sum_tib %>% select(Bead_Pool) %>% dplyr::pull()
+    beadPool <- pool_sum_tib %>% dplyr::select(Bead_Pool) %>% dplyr::pull()
     
+    if (opt$buildSubDir) opt$outDir <- file.path(opt$outDir, chipFormat, beadPool)
+    if (!dir.exists(opt$outDir)) dir.create(opt$outDir, recursive=TRUE)
+    call_csv <- file.path(opt$outDir, paste(out_name, 'call.csv.gz', sep=del) )
+    sigs_csv <- file.path(opt$outDir, paste(out_name, 'sigs.csv.gz', sep=del) )
+    samp_csv <- file.path(opt$outDir, paste(out_name, 'AutoSampleSheet.csv.gz', sep=del) )
+    ssum_csv <- file.path(opt$outDir, paste(out_name, 'SignalSummary.csv.gz', sep=del) )
+    time_csv <- file.path(opt$outDir, paste(out_name, 'runTime.csv.gz', sep=del) )
+
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     #                             Build Raw SSET::
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
@@ -102,7 +106,9 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     #                     'Dye-Swap-Noob' Order of Operations::
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-    if (FALSE) {
+    if (opt$DyeSwapNoob) {
+      if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Building 'DyeSwapNoob'.{RET}"))
+      
       sCalls <- c('dyeBiasCorrTypeINorm', 'inferTypeIChannel', 'noob')
       nCalls <- c(FALSE, TRUE,  TRUE)
       pCalls <- c(FALSE, TRUE,  TRUE)
@@ -122,7 +128,9 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     #                  SwapOpen:: 'Swap-Noob-Dye' Order of Operations::
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-    if (FALSE) {
+    if (opt$SwapOpen) {
+      if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Building 'SwapOpen'.{RET}"))
+      
       sCalls <- c('inferTypeIChannel','noob','dyeBiasCorrTypeINorm')
       
       nCalls <- c(TRUE,  FALSE, TRUE)
@@ -145,7 +153,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Building 'OpenSesame'.{RET}"))
     
-    if (FALSE) {
+    if (opt$RawOpen) {
       # NOTES: This is what OpenSesame does. The main difference is extracting detection p-values first. 
       #
       core_oo_str  <- 'RNDI'
@@ -337,7 +345,190 @@ cntPer_lte = function(x, min) {
 }
 
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-#                              Pval Methods::
+#                        Sample Sheet I/O Methods::
+# ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
+
+loadAutoSampleSheets = function(dir, platform, manifest, suffix='AutoSampleSheet.csv.gz', 
+                                addSampleName=FALSE, addPaths=FALSE,
+                                
+                                pvalDetectFlag=TRUE, pvalDetectMinKey='CG_NDI_negs_pval_PassPerc', pvalDetectMinVal=96,
+                                
+                                flagSampleDetect=TRUE, filterRef=FALSE,
+                                dbMin=90, r2Min=0.9,
+                                dbKey='AutoSample_dB_Key', r2Key='AutoSample_R2_Key',
+                                dbVal='AutoSample_dB_Val', r2Val='AutoSample_R2_Val',
+                                verbose=0,vt=3,tc=1,tt=NULL) {
+  funcTag <- 'loadAutoSampleSheets'
+  tabsStr <- paste0(rep(TAB, tc), collapse='')
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Starting, dir={dir}.{RET}"))
+  
+  stime <- system.time({
+    dat <- NULL
+    
+    dbKey <- dbKey %>% rlang::sym()
+    dbVal <- dbVal %>% rlang::sym()
+    r2Key <- r2Key %>% rlang::sym()
+    r2Val <- r2Val %>% rlang::sym()
+    
+    pvalDetectMinKey <- pvalDetectMinKey %>% rlang::sym()
+    # pvalDetectMinVal <- pvalDetectMinVal %>% rlang::sym()
+    
+    pattern <- paste(platform,manifest,suffix, sep='.')
+    auto_ss_list <- list.files(dir, pattern=pattern, recursive=TRUE, full.names=TRUE)
+    auto_ss_llen <- auto_ss_list %>% length()
+    if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Starting, SampleSheetCount={auto_ss_llen}{RET}"))
+    
+    # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
+    #  Load Samples::
+    auto_ss_tibs <- suppressMessages(suppressWarnings(lapply(auto_ss_list, readr::read_csv) )) %>% 
+      dplyr::bind_rows() # %>% 
+    #  addBeadPoolToSampleSheet(field='CG_Loci_Count', verbose=verbose,vt=vt+1,tc=tc+1)
+    auto_ss_tlen <- base::nrow(auto_ss_tibs)
+    if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} SampleSheetNrows(bPool)={auto_ss_tlen}{RET}"))
+    # return(auto_ss_tibs)
+    
+    # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
+    #  Add General Sample Name Field::
+    if (addSampleName) {
+      auto_ss_tibs <- auto_ss_tibs %>% dplyr::mutate(Sample_Name=!!dbKey) %>%
+        dplyr::select(Sample_Name, dplyr::everything())
+    }
+    
+    # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
+    #  Flag Probe Detected (pval)::
+    if (pvalDetectFlag && !is.null(pvalDetectMinKey) && !is.null(pvalDetectMinVal)) {
+      fail_tag <- paste0("Failed<",pvalDetectMinVal)
+      pass_tag <- paste0("Passed>=",pvalDetectMinVal)
+      
+      auto_ss_tibs <- auto_ss_tibs %>% dplyr::mutate(detectPval=case_when(
+        !!pvalDetectMinKey < !!pvalDetectMinVal ~ fail_tag,
+        TRUE ~ pass_tag)
+      )
+    }
+    
+    # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
+    #  Flag Auto-Detected Samples::
+    if (flagSampleDetect) {
+      fail_r2  <- paste0('Failed_r2<',r2Min)
+      fail_db  <- paste0('Failed_db<',dbMin)
+      fail_mt  <- paste0('Failed_r21-db')
+      pass_tag <- 'Passed'
+      
+      auto_ss_tibs <- auto_ss_tibs %>% dplyr::mutate(detectedSample=case_when(
+        !!r2Val < r2Min ~ fail_r2,
+        !!dbVal < dbMin ~ fail_db,
+        !!dbKey != !!r2Key ~ fail_mt,
+        TRUE ~ pass_tag)
+      )
+    }
+    
+    if (filterRef) {
+      auto_ss_tibs <- auto_ss_tibs %>% dplyr::filter() %>% dplyr::filter(!!dbVal >= dbMin) %>% dplyr::filter(!!r2Val >= r2Min)
+      auto_ss_flen <- base::nrow(auto_ss_tibs)
+      if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} SampleSheetNrows(paths)={auto_ss_flen}{RET}"))
+      
+      # Remove Unidentifiable
+      # if (rmOdd) auto_ss_tibs <- auto_ss_tibs %>% dplyr::filter(Bead_Pool!='Odd')
+    }
+    
+    # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
+    #  Add Paths::
+    if (addPaths) {
+      auto_ss_tibs <- auto_ss_tibs %>%
+        addPathsToSampleSheet(dir=dir, platform=platform, manifest=manifest, 
+                              field='Calls_Path', suffix='call.csv.gz$', verbose=verbose)
+      
+      #  # addPathsToSampleSheet(dir=dir, platform=platform, field='ProbesI_CSV_Path',  suffix='both.ProbesI.tib.csv.gz$', verbose=verbose) %>%
+      #  # addPathsToSampleSheet(dir=dir, platform=platform, field='ProbesII_CSV_Path', suffix='both.ProbesII.tib.csv.gz$', verbose=verbose) %>%
+      #   addPathsToSampleSheet(dir=dir, platform=platform, field='Probes_RDS_Path',   suffix='both.Probes.tib.rds$', verbose=verbose)
+      auto_ss_tlen <- base::nrow(auto_ss_tibs)
+      if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} SampleSheetNrows(paths)={auto_ss_tlen}{RET}"))
+    }
+    
+    dat <- auto_ss_tibs
+  })
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Done.{RET}{RET}"))
+  if (!is.null(tt)) tt$addTime(stime,funcTag)
+  
+  dat
+}
+
+# ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
+#                     Sample Sheet Manipulation Methods::
+# ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
+
+getUniqueFields = function(ss, keys, verbose=0,vt=1,tc=1) {
+  funcTag <- 'getUniqueFields'
+  tabsStr <- paste0(rep(TAB, tc), collapse='')
+  
+  # Remove Variables with a single value
+  uniq_exp_tib <- ss %>% dplyr::select(keys) %>% 
+    # dplyr::summarise_each(list(n_distinct) ) %>% 
+    dplyr::summarise_all(list(n_distinct) ) %>% 
+    tidyr::gather() %>% dplyr::filter(value>1) %>%
+    dplyr::arrange(value) %>% 
+    tidyr::spread(key, value)
+  
+  uniq_exp_keys <- uniq_exp_tib %>% names()
+  
+  # Special Treatment for Chip_Format (put in front)
+  field <- 'Chip_Format'  
+  isPresent <- grep(field, uniq_exp_keys) %>% length() > 0
+  if (isPresent)
+    uniq_exp_tib <- uniq_exp_tib %>% dplyr::select(field, everything())
+  
+  # Special Treatment for Bead_Pool (put in last)
+  field <- 'Bead_Pool'  
+  isPresent <- grep(field, uniq_exp_keys) %>% length() > 0
+  if (isPresent)
+    uniq_exp_tib <- uniq_exp_tib %>% dplyr::select(-field, everything())
+  
+  uniq_exp_keys <- uniq_exp_tib %>% names()
+  
+  uniq_exp_keys
+}
+
+addPathsToSampleSheet = function(ss, dir, platform, manifest, field, suffix, del='.',
+                                 verbose=0,vt=1,tc=1) {
+  funcTag <- 'addRdsPathsToSampleSheet'
+  
+  pattern=paste(platform,manifest,suffix, sep=del)
+  file_list <- NULL
+  file_list <- list.files(dir, pattern=pattern, recursive=TRUE, full.names=TRUE)
+  if (length(file_list)==0) file_list <- NULL
+  
+  # TBD:: Clean up code below!!!
+  ss_path_tibs <- tibble::tibble(Sentrix_Name=basename(file_list) %>% 
+                                   str_remove(paste('',opt$platform,'.*$', sep=del)), 
+                                 !!field := file_list)
+  
+  tib <- ss_path_tibs %>%
+    dplyr::distinct(Sentrix_Name, .keep_all=TRUE) %>% 
+    dplyr::inner_join(ss, by="Sentrix_Name")
+  
+  tib
+}
+
+addBeadPoolToSampleSheet = function(ss, field, verbose=0, vt=1, tc=1) {
+  funcTag <- 'addBeadPoolToSampleSheet'
+  
+  field <- field %>% rlang::sym()
+  ss <- ss %>% dplyr::mutate(
+    Bead_Pool=case_when(!!field >862926+1000 ~ 'EPIC_Plus',
+                        !!field >862926-1000 ~ 'EPIC',
+                        !!field >612329-1000 ~ 'BP1234',
+                        !!field >448696-1000 ~ 'BP123',
+                        !!field >148977-1000 ~ 'BP2',
+                        !!field >103113-1000 ~ 'Odd',
+                        !!field<=103113-1000 ~ 'UNK',
+                        TRUE ~ NA_character_) ) %>%
+    dplyr::select(Bead_Pool, everything())
+  
+  ss
+}
+
+# ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
+#                          Call (Beta/Pval) Methods::
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 
 maskTibs = function(tib, field, pval, minPval, del='_',
@@ -376,6 +567,100 @@ maskTib = function(tib, field, pval, minPval,
   if (!is.null(tt)) tt$addTime(stime,funcTag)
   
   tib
+}
+
+maskCall = function(tib, field, minKey, minVal, verbose=0,vt=3,tc=1,tt=NULL) {
+  funcTag <- 'maskCall'
+  tabsStr <- paste0(rep(TAB, tc), collapse='')
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Masking {field} with {minKey} at {minVal}.{RET}"))
+  
+  field <- field %>% rlang::sym()  
+  minKey  <- minKey %>% rlang::sym()
+  # minVal <- minVal %>% rlang::sym()
+  
+  stime <- system.time({
+    tib <- tib %>% dplyr::mutate(!!field := case_when(!!minKey >= !!minVal ~ NA_real_, TRUE ~ !!field))
+  })
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Done.{RET}{RET}"))
+  if (!is.null(tt)) tt$addTime(stime,funcTag)
+  
+  tib
+}
+
+loadCallFile = function(file, selKey, datKey, minKey=NULL, minVal=NULL, prefix=NULL, retMin=FALSE,
+                        verbose=0,vt=3,tc=1,tt=NULL) {
+  funcTag <- 'loadCallFile'
+  tabsStr <- paste0(rep(TAB, tc), collapse='')
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} selKey={selKey}, datKey={datKey} file={file}.{RET}"))
+  
+  stime <- system.time({
+    selKey <- selKey %>% rlang::sym()
+    datKey <- datKey %>% rlang::sym()
+    if (!is.null(minKey)) minKey <- minKey %>% rlang::sym()
+    
+    if (stringr::str_ends(file,'.rds')) {
+      tib <- suppressMessages(suppressWarnings(readr::read_rds(file)) )
+    } else {
+      tib <- suppressMessages(suppressWarnings(readr::read_csv(file)) )
+    }
+    
+    if (!is.null(minVal)) {
+      tib <- tib %>% dplyr::select(!!selKey,!!minKey, !!datKey)
+      
+      tot_cnt  <- tib %>% base::nrow()
+      pre_cnt  <- tib %>% dplyr::filter(is.na(!!datKey)) %>% base::nrow()
+      
+      tib <- maskCall(tib=tib, field=datKey, minKey=minKey, minVal=minVal, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
+      
+      pos_cnt  <- tib %>% dplyr::filter(is.na(!!datKey)) %>% base::nrow()
+      pos_per  <- round(100*pos_cnt/tot_cnt,3)
+      
+      if (!retMin) tib <- tib %>% dplyr::select(!!selKey,!!datKey)
+      if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Masked ({pos_per}%) Beta Values {pre_cnt} -> {pos_cnt}/{tot_cnt}.{RET}"))
+    } else {
+      tib <- tib %>% dplyr::select(!!selKey,!!datKey)
+    }
+    if (!is.null(prefix)) tib <- tib %>% purrr::set_names(paste(prefix,names(tib), sep='.') ) %>% dplyr::rename(!!selKey := 1)
+  })
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Done.{RET}{RET}"))
+  if (!is.null(tt)) tt$addTime(stime,funcTag)
+  
+  tib
+}
+
+loadCallFiles = function(files, selKey, datKey, minKey=NULL, minVal=NULL, prefix=NULL, 
+                         addRep=TRUE, retMin=FALSE, max=NULL, del='_',
+                         verbose=0,vt=3,tc=1,tt=NULL) {
+  funcTag <- 'loadCallFiles'
+  tabsStr <- paste0(rep(TAB, tc), collapse='')
+  stopifnot(is.vector(files))
+  
+  join_tibs <- NULL
+  files_cnt <- length(files)
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Total number of call files={files_cnt}, selKey={selKey}, datKey={datKey}.{RET}"))
+  
+  stime <- system.time({
+    for (ii in c(1:files_cnt)) {
+      if (verbose>=vt+2) cat(glue::glue("[{funcTag}]:{tabsStr}{TAB} ii={ii}, file={files[ii]}.{RET}"))
+      tib <- loadCallFile(file=files[ii], selKey=selKey, datKey=datKey, minKey=minKey, minVal=minVal, 
+                          retMin=retMin,
+                          verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
+      rep_str <- paste0('Rep',ii)
+      if (!is.null(prefix)) rep_str <- paste(prefix,rep_str, sep=del)
+      if (addRep) tib <- tib %>% purrr::set_names(paste(rep_str,names(tib), sep='.') ) %>% dplyr::rename(!!selKey := 1)
+      
+      if (is.null(join_tibs)) { join_tibs <- tib
+      } else { join_tibs <- join_tibs %>% dplyr::full_join(tib, by=selKey) }
+      
+      if (!is.null(max) && ii >= max) break
+    }
+  })
+  nrows <- join_tibs %>% base::nrow()
+  ncols <- join_tibs %>% base::ncol()
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} nrows={nrows}, ncols={ncols}.{RET}{RET}"))
+  if (!is.null(tt)) tt$addTime(stime,funcTag)
+  
+  join_tibs
 }
 
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
@@ -615,9 +900,9 @@ getIdatFormatTib = function(idat, verbose=0,vt=3,tc=1,tt=NULL) {
     else if (chipType=='BeadChip 24x1x2') chipFormat <- '24x1'
     else if (chipType=='Beadchip 24x1x2') chipFormat <- '24x1'
     else stop(glue::glue("{RET}[{funcTag}]: ERROR: Unrecognized ChipType={chipType}!{RET}{RET}"))
-    tib <- tibble::tibble('ChipType'=chipType,'ChipFormat'=chipFormat)
+    tib <- tibble::tibble('ChipType'=chipType,'Chip_Format'=chipFormat)
   })
-  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} ChipType={chipType}, ChipFormat={chipFormat}.{RET}{RET}"))
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} ChipType={chipType}, Chip_Format={chipFormat}.{RET}{RET}"))
   if (!is.null(tt)) tt$addTime(stime,funcTag)
   
   tib # %>% gather()

@@ -132,17 +132,7 @@ sesameWorkflow = function(sset=NULL, add, call, sigs, pheno, beadPool=NULL,
                                    !!ethnicity_str := ethnicity
                                    )
         
-        cat("\nBEG::phen_tib:\n")
-        print(phen_tib)
-        cat("\nEND:: phen_tib:\n")
-        
         pheno <- pheno %>% dplyr::bind_cols(phen_tib)
-        
-        cat("\n\nBEG:: Beta\n\n")
-        print(beta %>% head)
-        cat("\n\nBEG:: PHENO\n\n")
-        print(phen_tib)
-        cat("\n\nEND:: PHENO\n\n")
       }
     }
     
