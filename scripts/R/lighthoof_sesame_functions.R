@@ -64,22 +64,22 @@ sesameWorkflow = function(sset=NULL, add, call, sigs, pheno, beadPool=NULL,
       if (!is.null(negsCalls) && !is.null(negsCalls[ii]) && negsCalls[ii]==TRUE) {
         nabr <- paste(sabr,'negs_pval', sep=del)
         call <- call %>% dplyr::left_join(
-          sset %>% mutateSesame(method='detectionPnegEcdf', verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tt) %>%
-            ssetToPvalTib(name=nabr, verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tt), by="Probe_ID")
+          sset %>% mutateSesame(method='detectionPnegEcdf', verbose=verbose,vt=vt+1,tc=tc+1,tt=tt) %>%
+            ssetToPvalTib(name=nabr, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt), by="Probe_ID")
       }
       # Make Poob Detection-Pval Call::
       if (!is.null(poobCalls) && !is.null(poobCalls[ii]) && poobCalls[ii]==TRUE) {
         pabr <- paste(sabr,'poob_pval', sep=del)
         call <- call %>% dplyr::left_join(
-          sset %>% mutateSesame(method='pOOBAH', verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tt) %>%
-            ssetToPvalTib(name=pabr, verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tt), by="Probe_ID")
+          sset %>% mutateSesame(method='pOOBAH', verbose=verbose,vt=vt+1,tc=tc+1,tt=tt) %>%
+            ssetToPvalTib(name=pabr, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt), by="Probe_ID")
       }
       
       # Make Beta Call::
       beta <- NULL
       if (!is.null(betaCalls) && !is.null(betaCalls[ii]) && betaCalls[ii]==TRUE) {
         babr <- paste(sabr,'beta', sep=del)
-        beta <- ssetToBetaTib(sset=sset, name=babr, as.enframe=FALSE, verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tt)
+        beta <- ssetToBetaTib(sset=sset, name=babr, as.enframe=FALSE, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
         call <- call %>% dplyr::left_join(tibble::enframe(beta, name='Probe_ID', value=babr), by="Probe_ID")
       }
       
@@ -88,7 +88,7 @@ sesameWorkflow = function(sset=NULL, add, call, sigs, pheno, beadPool=NULL,
         # iabr <- paste(sabr,'sigs', sep=del)
         iabr <- sabr
         sigs <- sigs %>% dplyr::left_join(
-          ssetToSigsTib(sset=sset, add=add, name=iabr, verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tt), 
+          ssetToSigsTib(sset=sset, add=add, name=iabr, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt), 
           by=c("Probe_ID", "Man_Col", "Design_Type", "Probe_Type") )
       }
       
@@ -98,7 +98,7 @@ sesameWorkflow = function(sset=NULL, add, call, sigs, pheno, beadPool=NULL,
         
         # fabr <- paste(sabr,'pheno', sep=del)
         fabr <- sabr
-        if (is.null(beta)) beta <- ssetToBetaTib(sset=sset, name=fabr, as.enframe=FALSE, verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tt)
+        if (is.null(beta)) beta <- ssetToBetaTib(sset=sset, name=fabr, as.enframe=FALSE, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
         
         gct_str  <- paste('gct',fabr, sep=del)
         age_str  <- paste('agePheno',fabr, sep=del)
@@ -108,14 +108,13 @@ sesameWorkflow = function(sset=NULL, add, call, sigs, pheno, beadPool=NULL,
         ethnicity_str <- paste('ethnicity',fabr, sep=del)
 
         if (!is.null(beadPool) && beadPool=='EPIC') {
-          gct  <- safeGCT(sset=sset, verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tt)
-          age  <- safePhenoAge(beta, verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tt)
-          skin <- safeSkinAge(beta, verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tt)
-          sex  <- safeSex(sset, verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tt)
-          sexKaryo  <- safeSexKaryo(sset, verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tt)
-          ethnicity <- safeEthnicity(sset, verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tt)
+          gct  <- safeGCT(sset=sset, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
+          age  <- safePhenoAge(beta, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
+          skin <- safeSkinAge(beta, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
+          sex  <- safeSex(sset, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
+          sexKaryo  <- safeSexKaryo(sset, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
+          ethnicity <- safeEthnicity(sset, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
         } else {
-          cat("\n\n\nBEAD_POOL(NULL)=",beadPool,"\n\n\n",sep='')
           gct  <- NA
           age  <- NA
           skin <- NA
@@ -586,7 +585,7 @@ ssetBeta2bset = function(sset, bset, nkey, del='_',
                                        mask.use.tcga=mask.use.tcga, pval.threshold=pval.threshold, sum.TypeI=sum.TypeI) %>%
       tibble::enframe(name='Probe_ID', value=betaTag)
     
-    dat <- add2bset(bset=bset, inf1=betas, keyA='Probe_ID', verbose=opt$verbosity,vt=1,tc=0,tt=tTracker)
+    dat <- add2bset(bset=bset, inf1=betas, keyA='Probe_ID', verbose=verbose,vt=1,tc=0,tt=tTracker)
   })
   if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Done.{RET}{RET}"))
   if (!is.null(tt)) tt$addTime(stime,funcTag)
@@ -606,7 +605,7 @@ ssetPval2bset = function(sset, bset, nkey, pkey, del='_', verbose=0,vt=3,tc=1,tt
     dat <- NULL
     
     pvals <- sset@pval %>% tibble::enframe(name='Probe_ID', value=pvalTag)
-    dat <- add2bset(bset=bset, inf1=pvals, keyA='Probe_ID', verbose=opt$verbosity,vt=1,tc=0,tt=tTracker)
+    dat <- add2bset(bset=bset, inf1=pvals, keyA='Probe_ID', verbose=verbose,vt=1,tc=0,tt=tTracker)
   })
   if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Done.{RET}{RET}"))
   if (!is.null(tt)) tt$addTime(stime,funcTag)

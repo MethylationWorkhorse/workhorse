@@ -80,8 +80,11 @@ opt$autoDetect <- FALSE
 opt$minPval    <- 0.02
 opt$minDelta   <- 0.2
 
-opt$auto_pval_field <- 'NDI_negs_pval'
-opt$auto_beta_field <- 'NDI_beta'
+opt$auto_pval_field <- 'RNDI_negs_pval'
+opt$auto_beta_field <- 'RNDI_beta'
+
+# opt$auto_pval_field <- 'NDI_negs_pval'
+# opt$auto_beta_field <- 'NDI_beta'
 
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 #  Parallel/Cluster Parameters::
@@ -154,7 +157,14 @@ if (args.dat[1]=='RStudio') {
   
   opt$expDirName <- 'DeltaBetaCore'
   opt$outDir   <- file.path(par$topDir, 'workspace', par$prgmTag, opt$expDirName)
-  opt$buildDir <- file.path(par$topDir, 'workspace/lighthoof_main/builds', opt$expDirName)
+  opt$buildDir <- file.path(par$topDir, 'workspace/lighthoof_main_par/builds', opt$expDirName)
+  # opt$buildDir <- file.path(par$topDir, 'workspace/lighthoof_main/builds', opt$expDirName)
+  
+  opt$joinFull   <- FALSE
+  opt$expDirName <- '24x1-EPIC'
+  opt$outDirName <- paste(opt$expDirName, 'innerJoin', sep='.')
+  opt$outDir     <- file.path(par$topDir, 'workspace', par$prgmTag, opt$outDirName)
+  opt$buildDir   <- file.path(par$topDir, 'fromCluster/workspace/lighthoof_main_lin/builds', opt$expDirName)
 
   opt$writeSigs  <- FALSE
   opt$writeCall  <- FALSE
@@ -339,7 +349,8 @@ add_tib <- loadAddressSource(opt$addressPath, man_tib, fresh=FALSE, split=FALSE,
 
 opt$verbosity <- 5
 opt$pvalDetectFlag   <- TRUE
-opt$pvalDetectMinKey <- 'CG_NDI_negs_pval_PassPerc'
+# opt$pvalDetectMinKey <- 'CG_NDI_negs_pval_PassPerc'
+opt$pvalDetectMinKey <- 'CG_RNDI_negs_pval_PassPerc'
 opt$pvalDetectMinVal <- 96
 
 opt$flagSampleDetect <- TRUE
@@ -352,6 +363,15 @@ auto_ss_tib <- loadAutoSampleSheets(dir=opt$buildDir, platform=opt$platform, man
                                     flagSampleDetect=opt$flagSampleDetect, filterRef=opt$filterRef,
                                     addPaths=opt$addressPath, 
                                     verbose=opt$verbosity,tt=pTracker)
+
+# NOTES: Decoder_Pool assignment if data set is EPIC-24x1::
+if (FALSE) {
+  auto_ss_tib %>% dplyr::mutate(
+    Decoder_Pool=case_when(
+      Chip_Format=='24x1' & Bead_Pool=='EPIC' ~ 'DELTA',
+      TRUE ~ 'BETA') ) %>%
+    dplyr::select(Sentrix_Name, Decoder_Pool)
+}
 
 # file_list <- list.files(opt$samDir, pattern='SampleSheet.csv', full.names=TRUE)
 # mman_ss_tib <- suppressMessages(suppressWarnings(lapply(file_list, readr::read_csv) )) %>% 
@@ -366,6 +386,17 @@ mand_cnames <- c('Bead_Pool', 'Chip_Format')
 
 # ann_ss_tib <- mman_ss_tib %>% dplyr::inner_join(auto_ss_tib, by="Sentrix_Barcode")
 # ann_ss_tib %>% dplyr::select(mand_cnames, mman_cnames)
+
+# Sample Sheet with Beta/Delta Decoder Pools
+addDecoderPool <- TRUE
+addDecoderPool <- FALSE
+if (addDecoderPool) {
+  decoder_ss_csv <- '/Users/bbarnes/Documents/Projects/workhorse/sampleSheets/official/DecoderPoolTransition-2019_SampleSheet.csv.gz'
+  decoder_ss_tib <- readr::read_csv(decoder_ss_csv) %>% 
+    dplyr::select(Sentrix_Name, Sample_Name, Decoder_Pool) %>% dplyr::rename(User_Sample_Name=Sample_Name)
+  mman_cnames <- c(mman_cnames, 'Decoder_Pool')
+  auto_ss_tib <- decoder_ss_tib %>% dplyr::inner_join(auto_ss_tib, by="Sentrix_Name")
+}
 
 ann_ss_tib  <- auto_ss_tib
 uniq_cnames <- getUniqueFields(ann_ss_tib, c(mand_cnames, mman_cnames), verbose=opt$verbosity)
@@ -382,7 +413,6 @@ if (length(uniq_cnames)!=0) {
 } else {
   exp_ss_tibs <- ann_ss_tib %>% dplyr::mutate(Split_Key=Sample_Name, Experiment_Key=Sample_Name) %>%
     dplyr::select(Experiment_Key, Split_Key, dplyr::everything())
-  
 }
 
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
@@ -390,114 +420,41 @@ if (length(uniq_cnames)!=0) {
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 
 # Process by experiment first::
-ss_exp_tib <- exp_ss_tibs %>% dplyr::arrange(-CG_NDI_negs_pval_PassPerc) %>% split(.$Experiment_Key)
+pvalDetectMinKey_sym <- opt$pvalDetectMinKey %>% rlang::sym()
+ss_exp_tib <- exp_ss_tibs %>% dplyr::arrange(-!!pvalDetectMinKey_sym) %>% split(.$Experiment_Key)
+# ss_exp_tib <- exp_ss_tibs %>% dplyr::arrange(-opt$pvalDetectMinKey) %>% split(.$Experiment_Key)
 
-for (expKey in names(ss_exp_tib)) {
-  expKey <- '8x1_EPIC'
-  ss_sam_tib <- ss_exp_tib[[expKey]] %>% split(.$Sample_Name)
-
-  masked_tib <- NULL
-  counts_vec <- NULL
-  sample_vec <- names(ss_sam_tib)
-  
-  for (sample in names(ss_sam_tib)) {
-    cur_tib <- ss_sam_tib[[sample]]
-    
-    maxSamples <- NULL
-    # maxSamples <- 3
-    betas <- loadCallFiles(files=cur_tib$Calls_Path, selKey='Probe_ID', 
-                           datKey=opt$auto_beta_field, minKey=opt$auto_pval_field, minVal=opt$minPval, 
-                           prefix=sample, max=maxSamples,
-                           verbose=opt$verbosity+10,vt=0,tc=0,tt=pTracker)
-    if (is.null(masked_tib)) { masked_tib <- betas
-    } else { masked_tib <- masked_tib %>% dplyr::full_join(betas, by='Probe_ID') }
-    counts_vec <- c(counts_vec, base::ncol(betas) - 1)
-  }
-
-  # Rcpp::sourceCpp(par$sourceE)
-  loci_sum_tib <- getLociSampleSummary(masked_tib, verbose=opt$verbosity+1,vt=0,tt=pTracker)
-  
-  # Calculate Delta-Beta Distrbution::sd
-  dbd_std <- loci_sum_tib %>% dplyr::select(ends_with('db_sd')) %>% 
-    tidyr::gather('metric', 'deltaBeta')
-  ggplot2::ggplot(dbd_std, aes(x=deltaBeta, color=metric, fill=metric)) +
-    ggplot2::geom_density(alpha=0.3) +
-    ggplot2::xlim(-0.01, 0.25)
-  
-  # Calculate Delta-Beta Distrbution::mean
-  dbd_avg <- loci_sum_tib %>% dplyr::select(ends_with('db_avg')) %>% 
-    tidyr::gather('metric', 'deltaBeta')
-  ggplot2::ggplot(dbd_avg, aes(x=deltaBeta, color=metric, fill=metric)) +
-    ggplot2::geom_density(alpha=0.3) +
-    ggplot2::xlim(-0.01, 0.25)
-  
-  # Calculate CSS(Cluster Seperation Scores)::mean
-  css_avg <- loci_sum_tib %>% 
-    dplyr::mutate(HU_avg=H_avg-U_avg, MH_avg=M_avg-H_avg, MU_avg=M_avg-U_avg) %>%
-    dplyr::select(HU_avg, MH_avg, MU_avg) %>% 
-    tidyr::gather('metric', 'CSS')
-  ggplot2::ggplot(css_avg, aes(x=CSS, color=metric, fill=metric)) +
-    ggplot2::geom_density(alpha=0.5)
-
-  # Calculate CSS(Cluster Seperation Scores)::median
-  css_med <- loci_sum_tib %>% 
-    dplyr::mutate(HU_med=H_med-U_med, MH_med=M_med-H_med, MU_med=M_med-U_med) %>%
-    dplyr::select(HU_med, MH_med, MU_med) %>% 
-    tidyr::gather('metric', 'CSS')
-  
-  ggplot2::ggplot(css_med, aes(x=CSS, color=metric, fill=metric)) +
-    ggplot2::geom_density(alpha=0.5)
-  
-  # Cell Line Only Tib::
-  cellLine_mat <- masked_tib %>% 
-    dplyr::select(-starts_with('U_')) %>% 
-    dplyr::select(-starts_with('H_')) %>% 
-    dplyr::select(-starts_with('M_')) %>%
-    dplyr::select_if(is_numeric) %>% as.matrix()
-  
-  # dplyr::bind_cols(
-  cellLine_sum <- base::cbind(
-    matrixStats::rowMeans2(cellLine_mat),
-    matrixStats::rowMedians(cellLine_mat),
-    matrixStats::rowSds(cellLine_mat),
-    matrixStats::rowMads(cellLine_mat)
-  ) %>% tibble::as_tibble() %>%
-    purrr::set_names('beta_avg','beta_med','beta_sd','beta_mad') %>%
-    dplyr::mutate(Probe_ID=dplyr::pull(masked_tib, 1)) %>%
-    dplyr::select(Probe_ID, everything())
-  
-  break
-}
-
-if (FALSE) {
+if (TRUE) {
+  # TBD:: Refactor this back into the simple plot-RSquarede Matrix bit::
+  #
   # For now use standard...
   # ss_sam_tib <- exp_ss_tibs %>% dplyr::arrange(-CG_inf_negs_pval_PassPerc) %>% split(.$Sample_Name)
   # ss_sam_tib <- exp_ss_tibs %>% dplyr::arrange(-CG_RNDI_poob_pval_PassPerc) %>% split(.$Sample_Name)
-  ss_sam_tib <- exp_ss_tibs %>% dplyr::arrange(-CG_NDI_negs_pval_PassPerc) %>% split(.$Sample_Name)
+  ss_sam_tib <- exp_ss_tibs %>% dplyr::arrange(-CG_RNDI_poob_pval_PassPerc) %>% split(.$Sample_Name)
   cat(glue::glue("[{par$prgmTag}]: Starting Cross Sample Experiment Comparison(linear).{RET}"))
   
   for (sample in names(ss_sam_tib)) {
-    sample <- 'HELA'
-    
-    exp_split_tibs <- ss_sam_tib[[sample]] %>% split(.$Experiment_Key)
-    
-    betas <- NULL
-    for (expKey in names(exp_split_tibs)) { # break }
-      cur_tib <- exp_split_tibs[[expKey]]
-      
-      maxSamples <- NULL
-      betas <- loadCallFiles(files=cur_tib$Calls_Path, selKey='Probe_ID', 
-                             datKey=opt$auto_beta_field, minKey=opt$auto_pval_field, minVal=opt$minPval, max=maxSamples,
-                             verbose=opt$verbosity+10,vt=0,tc=0,tt=pTracker)
-      
-      btmp <- betas %>% dplyr::select(-Probe_ID) %>% head(n=100) %>% as.matrix()
-      # C_lociVariation(btmp, 0.2)
-      # Rcpp::sourceCpp(par$sourceE)
-      
-      
-      break
-    }
-    break
+    # sample <- 'HELA'
+    # 
+    # exp_split_tibs <- ss_sam_tib[[sample]] %>% split(.$Experiment_Key)
+    # 
+    # betas <- NULL
+    # for (expKey in names(exp_split_tibs)) { # break }
+    #   cur_tib <- exp_split_tibs[[expKey]]
+    #   
+    #   opt$maxSamples <- NULL
+    #   betas <- loadCallFiles(files=cur_tib$Calls_Path, selKey='Probe_ID', 
+    #                          datKey=opt$auto_beta_field, minKey=opt$auto_pval_field, minVal=opt$minPval, max=opt$maxSamples,
+    #                          verbose=opt$verbosity+10,vt=0,tc=0,tt=pTracker)
+    #   
+    #   btmp <- betas %>% dplyr::select(-Probe_ID) %>% head(n=100) %>% as.matrix()
+    #   # C_lociVariation(btmp, 0.2)
+    #   # Rcpp::sourceCpp(par$sourceE)
+    #   
+    #   
+    #   break
+    # }
+    # break
     
     # retTibs <- plotBetaMatrix_bySample(tib=ss_sam_tib, sample=sample, field='Beta', minPval=opt$minPval, 
     #                                    pvalKey=opt$auto_beta_field, betaKey=opt$auto_pval_field,
@@ -507,16 +464,16 @@ if (FALSE) {
     #                                    verbose=opt$verbosity+1,vt=0)
     
     ret_dat <- plotBetaMatrix_bySample(tib=ss_sam_tib, sample=sample, field='Beta', minPval=opt$minPval, 
-                                       pvalKey=opt$auto_pval_field, betaKey=opt$auto_beta_field,
+                                       pvalKey=opt$auto_pval_field, betaKey=opt$auto_beta_field, sort='CG_RNDI_negs_pval_PassPerc',
+                                       joinFull=opt$joinFull,
                                        manifest=man_tib, outDir=opt$outDir, 
                                        spread=opt$plotSpread, outType=opt$plotType, dpi=opt$dpi, format=opt$plotFormat,
                                        max=2, maxCnt=opt$plotSub,
                                        verbose=opt$verbosity+1,vt=0)
-    if (opt$single) break
-    break
+    # if (opt$single) break
+    # break
   }
 }
-
 
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 #                                Finished::

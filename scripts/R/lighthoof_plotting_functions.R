@@ -13,27 +13,45 @@ suppressWarnings(suppressPackageStartupMessages(require("hexbin")) )
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 #                   Per CpG Screening/Summary Functions::
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-getLociSampleSummary = function(tib, id='Probe_ID', max=NULL,
-                                field=NULL, minKey=NULL, minVal=NULL, verbose=0,vt=3,tc=1,tt=NULL) {
+getLociSampleSummary = function(tib, id='Probe_ID', max=NULL, retData=FALSE,
+                                verbose=0,vt=3,tc=1,tt=NULL) {
   funcTag <- 'getLociSampleSummary'
   tabsStr <- paste0(rep(TAB, tc), collapse='')
-  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Masking {field} with {minKey} at {minVal}.{RET}"))
+  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Starting...{RET}"))
   if (!is.null(max)) tib <- tib %>% head(n=max)
   
   stime <- system.time({
+    # Builds Samle Counts and Sample Names vectors::
     sam_tib <- tib %>% dplyr::select(-id) %>% names() %>% stringr::str_remove('_.*$') %>% 
       tibble::enframe() %>% dplyr::group_by(value) %>% summarise(Count=n())
     sam_vec <- sam_tib %>% dplyr::pull(1) %>% as.vector()
     cnt_vec <- sam_tib %>% dplyr::pull(2) %>% as.vector()
-    cpg_vec <- tib %>% dplyr::pull(1) %>% as.vector()
-    sam_mat <- tib %>% dplyr::select(-id) %>% as.matrix()
+
+    # Builds Summary Matrix (c++) and converts to tibble::
+    sam_mat <- tib %>% column_to_rownames(id) %>% as.matrix()
     sum_mat <- C_lociRSquared(sam_mat, cnt_vec, sam_vec)
-    
-    id <- id %>% rlang::sym()
-    sum_tib <- sum_mat %>% tibble::as_tibble() %>% tibble::add_column(!!id := cpg_vec) %>% dplyr::select(!!id, everything())
+    sum_tib <- sum_mat %>% tibble::as_tibble(rownames=id)
+
+    # TBD:: Old Code that should be deleted::
+    cpg_vec <- tib %>% dplyr::pull(1) %>% as.vector()
+    # sum_mat <- C_lociRSquared(sam_mat, cnt_vec, sam_vec, cpg_vec)
+    # id <- id %>% rlang::sym()
+    # sum_tib <- sum_mat %>% tibble::as_tibble() %>% tibble::add_column(!!id := cpg_vec) %>% dplyr::select(!!id, everything())
   })
   if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Done.{RET}{RET}"))
   if (!is.null(tt)) tt$addTime(stime,funcTag)
+  
+  if (retData) {
+    rdat <- NULL
+    rdat$cntVec <- cnt_vec
+    rdat$samVec <- sam_vec
+    rdat$cpgVec <- cpg_vec
+    rdat$samMat <- sam_mat
+    rdat$sumMat <- sum_mat
+    rdat$sumTib <- sum_tib
+    
+    return(rdat)
+  }
   
   sum_tib
 }
@@ -48,7 +66,7 @@ getLociSampleSummary = function(tib, id='Probe_ID', max=NULL,
 #                            Clean Functions::
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 
-selectSamples = function(ss, max=3, spread='mid', sort='CG_NDI_negs_pval_PassPerc',
+selectSamples = function(ss, max=3, spread='mid', sort,
                          verbose=0,vt=4,tc=1) {
   funcTag <- 'selectSamples'
   tabsStr <- paste0(rep(TAB, tc), collapse='')
@@ -168,7 +186,7 @@ loadProbeRDS = function(file, minPval=NULL, prefix=NULL, pvalKey, betaKey,
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 
 plotBetaMatrix_bySample = function(tib, sample, manifest, minPval, pvalKey, betaKey,
-                                   outDir, field='Beta', join='Probe_ID',
+                                   outDir, field='Beta', join='Probe_ID', sort, joinFull=FALSE,
                                    max=3, spread='mid', outType='auto', dpi=72, format='png', maxCnt=30000,
                                    retTibs=FALSE,
                                    verbose=0,vt=4,tc=1) {
@@ -193,7 +211,7 @@ plotBetaMatrix_bySample = function(tib, sample, manifest, minPval, pvalKey, beta
     loadRDS  <- TRUE
     loadIDAT <- FALSE
     if (exp_nrows>1) {
-      ss_exp_tibs[[exp_key]]  <- selectSamples(ss_exp_tibs[[exp_key]], max=max, spread=spread, sort='CG_NDI_negs_pval_PassPerc',
+      ss_exp_tibs[[exp_key]]  <- selectSamples(ss_exp_tibs[[exp_key]], max=max, spread=spread, sort=sort,
                                                verbose=verbose,vt=vt,tc=tc+1)
       if (loadRDS)
         prbs_exp_tibs[[exp_key]] <- loadSampleRDS_byRep(ss=ss_exp_tibs[[exp_key]], exp=exp_key, 
@@ -235,10 +253,15 @@ plotBetaMatrix_bySample = function(tib, sample, manifest, minPval, pvalKey, beta
           
           idatA <- idat_exp_tibs[[nameA]]
           idatB <- idat_exp_tibs[[nameB]]
-          
-          join_prbs <- manifest %>% dplyr::right_join(dplyr::full_join(prbsA,prbsB, by="Probe_ID"), by="Probe_ID") %>%
-            rename(Design_Type=DESIGN)
-          
+
+          if (joinFull) {
+            join_prbs <- manifest %>% dplyr::right_join(dplyr::full_join(prbsA,prbsB, by="Probe_ID"), by="Probe_ID") %>%
+              rename(Design_Type=DESIGN)
+          } else {
+            join_prbs <- manifest %>% dplyr::right_join(dplyr::inner_join(prbsA,prbsB, by="Probe_ID"), by="Probe_ID") %>%
+              rename(Design_Type=DESIGN)
+          }
+
           # join_prbs <- joinTibsAndManifest(datA=prbsA,keyA=nameA, datB=prbsB,keyB=nameB, 
           #                                  manifest=manifest, field=field, join=join,
           #                                  verbose=verbose, vt=vt+1, tc=tc+1)

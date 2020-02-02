@@ -112,6 +112,13 @@ int C_n_choose_m(int n, int r)
   return res;
 }
 
+// [[Rcpp::export]]
+NumericMatrix na_matrix(int n, int m){
+  NumericMatrix mat(n,m) ;
+  std::fill( mat.begin(), mat.end(), NumericVector::get_na() ) ;
+  return mat ;
+}
+
 /*
  * New Code Start::
  * 
@@ -122,15 +129,17 @@ int C_n_choose_m(int n, int r)
  */
 
 // [[Rcpp::export]]
-NumericMatrix C_lociRSquared(NumericMatrix x, NumericVector idxVec, CharacterVector samVec,
+NumericMatrix C_lociRSquared(NumericMatrix x, NumericVector idxVec, CharacterVector samVec, 
+                             Nullable<CharacterVector> cpgVec=R_NilValue, 
                              double minDelta2=0.2, double minDelta1=0.1, double minDelta0=0.05,
                              int verbose=0, int vt=1) {
   int dat_nrow = x.nrow(), dat_ncol = x.ncol();
   int out_nrows = 12;
   int sam_ncols = idxVec.size();
-  // int c = NCR_C(ncol, 2);
-  // double R::choose(double n, double k);
-  NumericMatrix out_mat(dat_nrow, (out_nrows*sam_ncols)+1);
+  
+  // Initialize Numeric Output Matrix
+  // NumericMatrix out_mat(dat_nrow, (out_nrows*sam_ncols)+1);
+  NumericMatrix out_mat = na_matrix(dat_nrow, (out_nrows*sam_ncols)+1);
   vector<string> out_cols_vec;
   out_cols_vec.push_back("RSquared");
   
@@ -141,7 +150,7 @@ NumericMatrix C_lociRSquared(NumericMatrix x, NumericVector idxVec, CharacterVec
     vector<double> x_vec;   // Pair wise first value (no NA's)
     vector<double> y_vec;   // Pair wise second value (no NA's)
     double r2 = 0;
-
+    
     int col_int_idx = 0; // Column Intialization Index
     for (int sIdx = 0; sIdx < sampleCnt; sIdx++) {
       int col_beg_idx = col_int_idx;
@@ -194,9 +203,9 @@ NumericMatrix C_lociRSquared(NumericMatrix x, NumericVector idxVec, CharacterVec
       }
       
       // Calculate value(mean, median, and SD)
-      double val_avg = -1;
-      double val_med = -1;
-      double val_std = -1;
+      double val_avg = NA_REAL;
+      double val_med = NA_REAL;
+      double val_std = NA_REAL;
       if (val_vec.size() != 0) {
         val_avg = mean(val_vec);
         val_med = findMedian(&val_vec[0], val_vec.size());
@@ -204,9 +213,9 @@ NumericMatrix C_lociRSquared(NumericMatrix x, NumericVector idxVec, CharacterVec
       }
       
       // Add delta-value(Mean, Median and SD)
-      double dbv_avg = -1;
-      double dbv_med = -1;
-      double dbv_std = -1;
+      double dbv_avg = NA_REAL;
+      double dbv_med = NA_REAL;
+      double dbv_std = NA_REAL;
       
       if (dbv_vec.size() != 0) {
         dbv_avg = mean(dbv_vec);
@@ -224,7 +233,7 @@ NumericMatrix C_lociRSquared(NumericMatrix x, NumericVector idxVec, CharacterVec
       out_mat(loci_idx,out_idx+4) = val_avg;
       out_mat(loci_idx,out_idx+5) = val_med;
       out_mat(loci_idx,out_idx+6) = val_std;
-
+      
       // Delta-Beta Counts::
       out_mat(loci_idx,out_idx+7) = db2_cnt;
       out_mat(loci_idx,out_idx+8) = db1_cnt;
@@ -261,7 +270,94 @@ NumericMatrix C_lociRSquared(NumericMatrix x, NumericVector idxVec, CharacterVec
     out_mat(loci_idx,0) = r2;
   }
   colnames(out_mat) = wrap(out_cols_vec);
+  rownames(out_mat) = rownames(x);
+  // if (cpgVec.isNotNull()) rownames(out_mat) = cpgVec;
   
+  return out_mat;
+}
+
+// [[Rcpp::export]]
+NumericMatrix C_lociRowsToCols(NumericMatrix x, NumericVector idxVec, CharacterVector samVec, 
+                               Nullable<CharacterVector> cpgVec=R_NilValue, //CharacterVector cpgVec=R_NilValue,
+                               double minDelta2=0.2, double minDelta1=0.1, double minDelta0=0.05,
+                               int verbose=0, int vt=1) {
+  int dat_nrow = x.nrow(), dat_ncol = x.ncol();
+  if (verbose>=vt) Rcout << "Inp Matrix Dim: dat_nrow=" << dat_nrow << ", dat_ncol=" << dat_ncol << "\n";
+
+  // Two columns for each row in output
+  int out_ncols = dat_nrow * 2;
+  if (verbose>=vt) Rcout << "Out Matrix Dim: " << "out_ncols=" << out_ncols << "\n";
+  
+  // To calculate out_nrows we need to calculate the number of sample combinations (choose function)
+  //  for each sample. We'll create the output column name vector at the same time.
+  int out_nrows = 0;
+  vector<string> out_rows_vec;
+  for (int ii=0; ii < idxVec.size(); ii++) {
+    int choose_cnt = C_n_choose_m(idxVec[ii], 2);
+    out_nrows += choose_cnt;
+    for (int jj=0; jj < choose_cnt; jj++) {
+      out_rows_vec.push_back((string)samVec[ii]);
+      if (verbose>=vt) Rcout << "Out Matrix Cols: ii/jj=(" << ii << "/" << jj << "), SampleName=" << samVec[ii] << "\n";
+    }
+  }
+  if (verbose>=vt) Rcout << "Out Matrix Dim: " << "out_nrows=" << out_nrows << "\n";
+  
+  // Intialize output matrix and set rownames(samples)::
+  // NumericMatrix out_mat(dat_nrow, out_ncols, NA);
+  // NumericMatrix out_mat(dat_nrow, out_ncols);
+  NumericMatrix out_mat = na_matrix(out_nrows, out_ncols);
+  rownames(out_mat) = wrap(out_rows_vec);
+  
+  // if (1) return(out_mat);
+  
+  CharacterVector inp_cpg_vev = rownames(x);
+  vector<string> out_cols_vec;
+
+  if (verbose>=vt) Rcout << "Matrix Dim: nrow=" << dat_nrow << ", ncol=" << dat_ncol << "\n";
+  int sampleCnt = idxVec.size();
+  
+  for (int loci_idx = 0; loci_idx < dat_nrow; loci_idx++) {
+    int row_out_idx = 0;
+    int col_out_idx = loci_idx * 2;
+    
+    // vector<double> x_vec;   // Pair wise first value (no NA's)
+    // vector<double> y_vec;   // Pair wise second value (no NA's)
+    
+    // Add cpgs to column names::
+    string cpgA = (string)inp_cpg_vev(loci_idx) + "_A";
+    string cpgB = (string)inp_cpg_vev(loci_idx) + "_B";
+    out_cols_vec.push_back(cpgA);
+    out_cols_vec.push_back(cpgB);
+    
+    int col_int_idx = 0; // Column Intialization Index
+    for (int sIdx = 0; sIdx < sampleCnt; sIdx++) {
+      int col_beg_idx = col_int_idx;
+      int col_end_idx = col_beg_idx + idxVec[sIdx];
+      string sampleName = (string)samVec[sIdx];
+      
+      if (verbose>=vt) 
+        Rcout << "loci=" << loci_idx << ", sIdx=" << sIdx << ", sample=" << sampleName << ", beg=" << col_beg_idx << ", end=" << col_end_idx << "\n";
+      for (int col_idxA = col_beg_idx; col_idxA < col_end_idx; col_idxA++) {
+        for (int col_idxB = col_idxA+1; col_idxB < col_end_idx; col_idxB++) {
+          
+          double valA = x(loci_idx, col_idxA);
+          double valB = x(loci_idx, col_idxB);
+          
+          out_mat(row_out_idx, col_out_idx+0) = valA; // x(loci_idx, col_idxA);
+          out_mat(row_out_idx, col_out_idx+1) = valB; // x(loci_idx, col_idxB);
+          
+          if (verbose>=vt) 
+            Rcout << "row/col_out_idx=(" << row_out_idx << "," << col_out_idx << "), vals(A/B)=(" << valA << "," << valB << "), " <<
+              "\tidxA=" << col_idxA << ", idxB=" << col_idxB << ", valA=" << valA << ", valB=" << valB << "\n";
+          
+          row_out_idx++;
+        }
+      }
+      col_int_idx = col_end_idx;
+    }
+  }
+  colnames(out_mat) = wrap(out_cols_vec);
+
   return out_mat;
 }
 

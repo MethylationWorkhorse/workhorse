@@ -114,7 +114,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
       pCalls <- c(FALSE, TRUE,  TRUE)
       bCalls <- c(FALSE, FALSE, TRUE)
       iCalls <- c(FALSE, FALSE, TRUE)
-      fCalls <- c(FALSE, FALSE, FALSE)
+      fCalls <- c(TRUE,  TRUE,  TRUE)
       
       ses_data <- sesameWorkflow(sset=raw_sset, add=add, call=call_tib, sigs=sigs_tib, pheno=phen_sum_tib,
                                  stepCalls=sCalls, negsCalls=nCalls,poobCalls=pCalls, betaCalls=bCalls, intsCalls=iCalls, fenoCalls=fCalls,
@@ -137,7 +137,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
       pCalls <- c(TRUE,  FALSE, TRUE)
       bCalls <- c(FALSE, FALSE, TRUE)
       iCalls <- c(FALSE, FALSE, TRUE)
-      fCalls <- c(FALSE, FALSE, FALSE)
+      fCalls <- c(TRUE , FALSE, TRUE)
       
       ses_data <- sesameWorkflow(sset=raw_sset, add=add, call=call_tib, sigs=sigs_tib, pheno=phen_sum_tib,
                                  stepCalls=sCalls, negsCalls=nCalls,poobCalls=pCalls, betaCalls=bCalls, intsCalls=iCalls, fenoCalls=fCalls,
@@ -191,6 +191,15 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     phen_sum_tib <- ses_data[[3]]
     sset_ret <- ses_data[[4]] # For Development Mode...
     
+    if (opt$addBeadCounts) {
+      cat(glue::glue("[{funcTag}]:{tabsStr}: Adding Bead Counts to Signal Tibs...{RET}"))
+      sigs_tib <- idat$sig %>% dplyr::inner_join(sigs_tib, by='Address') %>%
+        dplyr::select(Probe_ID, Address, Man_Col, Design_Type, Probe_Type, everything()) %>% 
+        dplyr::arrange(Probe_ID) %>% 
+        dplyr::mutate(Address=as.integer(Address))
+      cat(glue::glue("[{funcTag}]:{tabsStr}: Done Adding Bead Counts to Signal Tibs...{RET}{RET}"))
+    }
+
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     #                            Build Sample Sheet::
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
@@ -297,11 +306,11 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     
     roundData <- TRUE
     if (roundData) {
-      call_tib     <- call_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.numeric, round, 6)
-      sigs_tib     <- sigs_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.numeric, round, 6)
-      samp_sum_tib <- samp_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.numeric, round, 6)
-      sigs_sum_tib <- sigs_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.numeric, round, 6)
-      time_data    <- time_data %>% dplyr::ungroup() %>% dplyr::mutate_if(is.numeric, round, 6)
+      call_tib     <- call_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.double, round, 6)
+      sigs_tib     <- sigs_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.double, round, 6)
+      samp_sum_tib <- samp_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.double, round, 6)
+      sigs_sum_tib <- sigs_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.double, round, 6)
+      time_data    <- time_data %>% dplyr::ungroup() %>% dplyr::mutate_if(is.double, round, 6)
     }
     
     if (opt$writeCall) readr::write_csv(call_tib, call_csv)
@@ -340,8 +349,25 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 #                     Summarizing Counting Methods::
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
-cntPer_lte = function(x, min) {
-  round(100*length(x[which(x<=min)])/length(x),3)
+cntPer_lte = function(x, min, prc=3) {
+  round(100*length(x[which(x<=min)])/length(x),prc)
+}
+
+cntPer_gt = function(x, max, prc=3) {
+  round(100*length(x[which(x>max)])/length(x),prc)
+}
+
+bool2int = function(x) {
+  y <- NULL
+  for (ii in seq(length(x))) {
+    if (is.na(x[ii]) || x[ii]==FALSE) {
+      y[ii] <- 0
+    } else {
+      y[ii] <- 1
+    }
+  }
+  
+  y
 }
 
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
@@ -349,10 +375,8 @@ cntPer_lte = function(x, min) {
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 
 loadAutoSampleSheets = function(dir, platform, manifest, suffix='AutoSampleSheet.csv.gz', 
-                                addSampleName=FALSE, addPaths=FALSE,
-                                
-                                pvalDetectFlag=TRUE, pvalDetectMinKey='CG_NDI_negs_pval_PassPerc', pvalDetectMinVal=96,
-                                
+                                addSampleName=FALSE, addPathsCall=FALSE, addPathsSigs=FALSE,
+                                pvalDetectFlag=TRUE, pvalDetectMinKey, pvalDetectMinVal=96,
                                 flagSampleDetect=TRUE, filterRef=FALSE,
                                 dbMin=90, r2Min=0.9,
                                 dbKey='AutoSample_dB_Key', r2Key='AutoSample_R2_Key',
@@ -370,13 +394,13 @@ loadAutoSampleSheets = function(dir, platform, manifest, suffix='AutoSampleSheet
     r2Key <- r2Key %>% rlang::sym()
     r2Val <- r2Val %>% rlang::sym()
     
-    pvalDetectMinKey <- pvalDetectMinKey %>% rlang::sym()
+    if (!is.null(pvalDetectMinKey)) pvalDetectMinKey <- pvalDetectMinKey %>% rlang::sym()
     # pvalDetectMinVal <- pvalDetectMinVal %>% rlang::sym()
     
     pattern <- paste(platform,manifest,suffix, sep='.')
     auto_ss_list <- list.files(dir, pattern=pattern, recursive=TRUE, full.names=TRUE)
     auto_ss_llen <- auto_ss_list %>% length()
-    if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Starting, SampleSheetCount={auto_ss_llen}{RET}"))
+    if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Starting, SampleSheetCount={auto_ss_llen}, pattern={pattern}.{RET}"))
     
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     #  Load Samples::
@@ -433,14 +457,19 @@ loadAutoSampleSheets = function(dir, platform, manifest, suffix='AutoSampleSheet
     
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     #  Add Paths::
-    if (addPaths) {
+    if (addPathsCall) {
       auto_ss_tibs <- auto_ss_tibs %>%
         addPathsToSampleSheet(dir=dir, platform=platform, manifest=manifest, 
                               field='Calls_Path', suffix='call.csv.gz$', verbose=verbose)
       
-      #  # addPathsToSampleSheet(dir=dir, platform=platform, field='ProbesI_CSV_Path',  suffix='both.ProbesI.tib.csv.gz$', verbose=verbose) %>%
-      #  # addPathsToSampleSheet(dir=dir, platform=platform, field='ProbesII_CSV_Path', suffix='both.ProbesII.tib.csv.gz$', verbose=verbose) %>%
-      #   addPathsToSampleSheet(dir=dir, platform=platform, field='Probes_RDS_Path',   suffix='both.Probes.tib.rds$', verbose=verbose)
+      auto_ss_tlen <- base::nrow(auto_ss_tibs)
+      if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} SampleSheetNrows(paths)={auto_ss_tlen}{RET}"))
+    }
+    if (addPathsSigs) {
+      auto_ss_tibs <- auto_ss_tibs %>%
+        addPathsToSampleSheet(dir=dir, platform=platform, manifest=manifest, 
+                              field='Sigs_Path', suffix='sigs.csv.gz$', verbose=verbose)
+      
       auto_ss_tlen <- base::nrow(auto_ss_tibs)
       if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} SampleSheetNrows(paths)={auto_ss_tlen}{RET}"))
     }
@@ -545,7 +574,7 @@ maskTibs = function(tib, field, pval, minPval, del='_',
     fstr <- paste(sname,field, sep=del)
     pstr <- paste(sname,pval, sep=del)
     tib <- maskTib(tib, field=fstr, pval=pstr, minPval=minPval,
-                   verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tTracker)
+                   verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
   }
   tib
 }
@@ -587,15 +616,21 @@ maskCall = function(tib, field, minKey, minVal, verbose=0,vt=3,tc=1,tt=NULL) {
   tib
 }
 
-loadCallFile = function(file, selKey, datKey, minKey=NULL, minVal=NULL, prefix=NULL, retMin=FALSE,
+loadCallFile = function(file, selKey, datKey=NULL, minKey=NULL, minVal=NULL, prefix=NULL, retMin=FALSE,
                         verbose=0,vt=3,tc=1,tt=NULL) {
   funcTag <- 'loadCallFile'
   tabsStr <- paste0(rep(TAB, tc), collapse='')
-  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} selKey={selKey}, datKey={datKey} file={file}.{RET}"))
+  if (verbose>=vt) {
+    if (!is.null(datKey)) {
+      cat(glue::glue("[{funcTag}]:{tabsStr} selKey={selKey}, datKey={datKey} file={file}.{RET}")) 
+    } else { 
+      cat(glue::glue("[{funcTag}]:{tabsStr} selKey={selKey}, datKey=LOAD_ALL, file={file}.{RET}"))
+    }
+  }
   
   stime <- system.time({
     selKey <- selKey %>% rlang::sym()
-    datKey <- datKey %>% rlang::sym()
+    if (!is.null(datKey)) datKey <- datKey %>% rlang::sym()
     if (!is.null(minKey)) minKey <- minKey %>% rlang::sym()
     
     if (stringr::str_ends(file,'.rds')) {
@@ -604,7 +639,7 @@ loadCallFile = function(file, selKey, datKey, minKey=NULL, minVal=NULL, prefix=N
       tib <- suppressMessages(suppressWarnings(readr::read_csv(file)) )
     }
     
-    if (!is.null(minVal)) {
+    if (!is.null(minVal) && !is.null(datKey)) {
       tib <- tib %>% dplyr::select(!!selKey,!!minKey, !!datKey)
       
       tot_cnt  <- tib %>% base::nrow()
@@ -618,7 +653,7 @@ loadCallFile = function(file, selKey, datKey, minKey=NULL, minVal=NULL, prefix=N
       if (!retMin) tib <- tib %>% dplyr::select(!!selKey,!!datKey)
       if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Masked ({pos_per}%) Beta Values {pre_cnt} -> {pos_cnt}/{tot_cnt}.{RET}"))
     } else {
-      tib <- tib %>% dplyr::select(!!selKey,!!datKey)
+      if (!is.null(datKey)) tib <- tib %>% dplyr::select(!!selKey,!!datKey)
     }
     if (!is.null(prefix)) tib <- tib %>% purrr::set_names(paste(prefix,names(tib), sep='.') ) %>% dplyr::rename(!!selKey := 1)
   })
@@ -628,7 +663,7 @@ loadCallFile = function(file, selKey, datKey, minKey=NULL, minVal=NULL, prefix=N
   tib
 }
 
-loadCallFiles = function(files, selKey, datKey, minKey=NULL, minVal=NULL, prefix=NULL, 
+loadCallFiles = function(files, selKey, datKey=NULL, minKey=NULL, minVal=NULL, prefix=NULL, 
                          addRep=TRUE, retMin=FALSE, max=NULL, del='_',
                          verbose=0,vt=3,tc=1,tt=NULL) {
   funcTag <- 'loadCallFiles'
@@ -637,8 +672,12 @@ loadCallFiles = function(files, selKey, datKey, minKey=NULL, minVal=NULL, prefix
   
   join_tibs <- NULL
   files_cnt <- length(files)
-  if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Total number of call files={files_cnt}, selKey={selKey}, datKey={datKey}.{RET}"))
-  
+  if (verbose>=vt) {
+    cat(glue::glue("[{funcTag}]:{tabsStr} Total number of call files={files_cnt}, selKey={selKey}, datKey={datKey}.{RET}"))
+  } else {
+    cat(glue::glue("[{funcTag}]:{tabsStr} Total number of call files={files_cnt}, selKey={selKey}, datKey=ALL_DATA.{RET}"))
+  }
+
   stime <- system.time({
     for (ii in c(1:files_cnt)) {
       if (verbose>=vt+2) cat(glue::glue("[{funcTag}]:{tabsStr}{TAB} ii={ii}, file={files[ii]}.{RET}"))
@@ -1053,7 +1092,7 @@ sampleDetect = function(can, ref, minPval, minDelta, dname, pname, ptype=NULL,
     
     # 3. Filter on P-value
     tib <- maskTibs(tib, field=field, pval=pval, minPval=minPval, del=del,
-                    verbose=verbose,vt=vt+1,tc=tc+1,tt=tTracker)
+                    verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
     
     # 4. Build matrix
     mat <- tib %>% dplyr::select(-c(join,!!dname,!!pname)) %>%
@@ -1064,7 +1103,7 @@ sampleDetect = function(can, ref, minPval, minDelta, dname, pname, ptype=NULL,
       gg <- plotPairs(tib=tib, sample=sname, nameA='Sample', nameB='CanonicalReference',
                       field='beta', field_str='beta', detp='pval', outDir=outDir, minPval=minPval, minDelta=minDelta,
                       dpi=dpi, format=format, datIdx=datIdx,
-                      verbose=verbose,vt=vt+1,tc=tc+1,tt=tTracker)
+                      verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
     
     # 5. Build R-Squared Matrix
     r2m <- rsquaredMatrix(mat, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)

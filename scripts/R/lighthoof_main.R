@@ -17,8 +17,6 @@ suppressWarnings(suppressPackageStartupMessages(require("grid")) )
 # Parallel Computing Packages
 suppressWarnings(suppressPackageStartupMessages(require("doParallel")) )
 
-# AnnotationHub(proxy='127.0.0.1:10801')
-
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
 #                              Global Params::
 # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
@@ -82,6 +80,7 @@ opt$minDelta   <- 0.2
 
 opt$negsMinCutoff   <- 96
 opt$sigs_sum_field  <- 'avg'
+opt$addBeadCounts   <- FALSE
 
 # Parallel/Cluster Parameters::
 opt$single   <- FALSE
@@ -141,7 +140,7 @@ if (args.dat[1]=='RStudio') {
   opt$cluster    <- FALSE
   opt$parallel   <- FALSE
   opt$single     <- TRUE
-
+  
   opt$expRunStr  <- 'EXP5'
   opt$expChipNum <- '203452220020'
   opt$idatsDir <- file.path(par$topDir, 'report-20191112/idats', opt$expRunStr)
@@ -152,12 +151,19 @@ if (args.dat[1]=='RStudio') {
 
   opt$expRunStr  <- 'DeltaBetaCore'
   opt$expChipNum <- '202761400007'
-  opt$idatsDir <- '/Users/bbarnes/Documents/Projects/workhorse/idats_DeltaBetaCore'
+  opt$expChipNum <- '204275020006'
+  opt$idatsDir   <- '/Users/bbarnes/Documents/Projects/workhorse/idats_DeltaBetaCore'
+
+  opt$expRunStr  <- '24x1-EPIC'
+  opt$expChipNum <- '203631770004'
+  opt$expChipNum <- '204275020006' # _R12C02
+  opt$idatsDir   <- file.path('/Users/bbarnes/Documents/Projects/workhorse', paste0('idats_',opt$expRunStr), opt$expChipNum)
   
   opt$outDir   <- file.path(par$topDir, 'workspace', par$prgmTag, par$runMode, opt$expRunStr)
 
   par$retData <- TRUE
-  
+  opt$addBeadCounts <- TRUE
+
   opt$verbosity <- 4
   
 } else {
@@ -229,6 +235,8 @@ if (args.dat[1]=='RStudio') {
                 help="Minimum passing detection p-value percentage of probes used to call requeue of sample from provider [default= %default]", metavar="double"),
     make_option(c("--sigs_sum_field"), type="character", default=opt$sigs_sum_field, 
                 help="Signal summary field in AutoSampleSheet [default= %default]", metavar="character"),
+    make_option(c("--addBeadCounts"), action="store_true", default=opt$addBeadCounts, 
+                help="Boolean flag to add bead counts to signal output [default= %default]", metavar="boolean"),
     
     make_option(c("--plotFormat"), type="character", default=opt$plotFormat, 
                 help="Plotting output format [default= %default]", metavar="character"),
@@ -438,6 +446,8 @@ if (opt$cluster) {
       
       rdat <- sesamizeSingleSample(prefix=chipPrefixes[[prefix]], man=man_tib, add=add_tib, autoRef=auto_sam_tib, opt=opt, retData=par$retData)
 
+      # rdat$sigs %>% select(Probe_ID, starts_with('Bead'), ends_with('Swap'))
+      
       if (opt$single) break
     }
   }

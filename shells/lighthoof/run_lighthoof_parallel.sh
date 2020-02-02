@@ -17,6 +17,7 @@ parallel=true
 autoDetect=true
 single=false
 buildSubDir=true
+addBeadCounts=true
 
 DyeSwapNoob=true
 SwapOpen=true
@@ -85,6 +86,9 @@ fi
 
 if [ "${buildSubDir}" = true ]; then
     CMD+=" --buildSubDir"
+fi
+if [ "${addBeadCounts}" = true ]; then
+    CMD+=" --addBeadCounts"
 fi
 
 if [ "${DyeSwapNoob}" = true ]; then
