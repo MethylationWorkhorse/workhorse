@@ -21,7 +21,7 @@ addBeadCounts=true
 
 DyeSwapNoob=true
 SwapOpen=true
-RawOpen=true
+RawOpen=false
 
 writeSigs=false
 writeCall=true
