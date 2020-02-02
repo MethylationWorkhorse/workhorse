@@ -23,7 +23,7 @@ DyeSwapNoob=true
 SwapOpen=true
 RawOpen=false
 
-writeSigs=false
+writeSigs=true
 writeCall=true
 writeAuto=false
 plotAuto=false

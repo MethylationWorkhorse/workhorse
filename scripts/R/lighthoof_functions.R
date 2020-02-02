@@ -304,13 +304,16 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     
     time_data <- tTracker$time
     
-    roundData <- TRUE
-    if (roundData) {
-      call_tib     <- call_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.double, round, 6)
-      sigs_tib     <- sigs_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.double, round, 6)
-      samp_sum_tib <- samp_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.double, round, 6)
-      sigs_sum_tib <- sigs_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.double, round, 6)
-      time_data    <- time_data %>% dplyr::ungroup() %>% dplyr::mutate_if(is.double, round, 6)
+    roundData <- NULL
+    roundData <- 6
+    if (!is.null(roundData) && is.integer(roundData) ) {
+      if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Rounding output variabiles to {roundData}.{RET}"))
+      call_tib     <- call_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.double, round, roundData)
+      sigs_tib     <- sigs_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.double, round, roundData)
+      samp_sum_tib <- samp_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.double, round, roundData)
+      sigs_sum_tib <- sigs_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.double, round, roundData)
+      time_data    <- time_data %>% dplyr::ungroup() %>% dplyr::mutate_if(is.double, round, roundData)
+      if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Done rounding output variabiles to {roundData}.{RET}{RET"))
     }
     
     if (opt$writeCall) readr::write_csv(call_tib, call_csv)
