@@ -9,7 +9,7 @@ outSuffix=$2
 EXP_NAME=`basename $idatsDir`
 EXP_NAME=$(sed 's/^idats_//' <<< "$EXP_NAME")
 
-verbosity=3
+verbosity=4
 
 fresh=false
 cluster=true
