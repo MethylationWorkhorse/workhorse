@@ -314,11 +314,11 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
       if (opt$verbosity>=vt+1) print(sigs_tib)
       
       if (opt$verbosity>=vt+1) cat(glue::glue("[{funcTag}]:{tabsStr} Printing samp_sum_tib.{RET}"))
-      samp_sum_tib <- samp_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.numeric, round, roundData)
+      samp_sum_tib <- samp_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(base::is.numeric, round, roundData)
       if (opt$verbosity>=vt+1) print(samp_sum_tib)
       
       if (opt$verbosity>=vt+1) cat(glue::glue("[{funcTag}]:{tabsStr} Printing sigs_sum_tib{RET}"))
-      sigs_sum_tib <- sigs_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(purrr::is_numeric, round, roundData)
+      sigs_sum_tib <- sigs_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(base::is.numeric, round, roundData)
       if (opt$verbosity>=vt+1) print(sigs_sum_tib)
       
       if (opt$verbosity>=vt+1) cat(glue::glue("[{funcTag}]:{tabsStr} Printing time_data{RET}"))
@@ -1158,7 +1158,7 @@ sampleDetect = function(can, ref, minPval, minDelta, dname, pname, ptype=NULL,
       dbm_csv <- file.path(outDir, paste0(fname,'.deltaMatrix.csv.gz'))
       ord_csv <- file.path(outDir, paste0(fname,'.orderedAutoMatrix.csv.gz'))
       
-      if (roundData) r2m_tib <- r2m_tib %>% dplyr::mutate_if(is.numeric, round, 6)
+      if (roundData) r2m_tib <- r2m_tib %>% dplyr::mutate_if(base::is.numeric, round, 6)
       if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr}{TAB} Writing RSquared(CSV)={r2m_csv}.{RET}"))
       readr::write_csv(r2m_tib, r2m_csv)
       if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr}{TAB} Writing DeltaBeta(CSV)={dbm_csv}.{RET}"))
