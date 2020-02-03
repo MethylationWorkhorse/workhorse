@@ -307,25 +307,24 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     roundData <- NULL
     roundData <- 6
     if (!is.null(roundData)) {
-      # if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Rounding output variabiles to {roundData}.{RET}"))
+      if (opt$verbosity>=vt+1) cat(glue::glue("[{funcTag}]:{tabsStr} Rounding output variabiles to {roundData}.{RET}"))
       call_tib     <- call_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(purrr::is_double, round, roundData)
-      # print(call_tib)
+      if (opt$verbosity>=vt+2) print(call_tib)
       sigs_tib     <- sigs_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(purrr::is_double, round, roundData)
-      # print(sigs_tib)
+      if (opt$verbosity>=vt+2) print(sigs_tib)
       
-      if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Printing samp_sum_tib.{RET}"))
-      # samp_sum_tib <- samp_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.numeric, round, roundData)
+      if (opt$verbosity>=vt+2) cat(glue::glue("[{funcTag}]:{tabsStr} Printing samp_sum_tib.{RET}"))
       samp_sum_tib <- samp_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(is.numeric, round, roundData)
-      print(samp_sum_tib)
+      if (opt$verbosity>=vt+2) print(samp_sum_tib)
       
-      if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Printing sigs_sum_tib{RET}"))
+      if (opt$verbosity>=vt+2) cat(glue::glue("[{funcTag}]:{tabsStr} Printing sigs_sum_tib{RET}"))
       sigs_sum_tib <- sigs_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(purrr::is_numeric, round, roundData)
-      print(sigs_sum_tib)
+      if (opt$verbosity>=vt+2) print(sigs_sum_tib)
       
-      if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Printing time_data{RET}"))
+      if (opt$verbosity>=vt+2) cat(glue::glue("[{funcTag}]:{tabsStr} Printing time_data{RET}"))
       time_data    <- time_data %>% dplyr::ungroup() %>% dplyr::mutate_if(base::is.numeric, round, roundData)
-      print(time_data)
-      if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Done rounding output variabiles to {roundData}.{RET}{RET}"))
+      if (opt$verbosity>=vt+2) print(time_data)
+      if (opt$verbosity>=vt+1) cat(glue::glue("[{funcTag}]:{tabsStr} Done rounding output variabiles to {roundData}.{RET}{RET}"))
     } else {
       if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Will NOT round output variabiles.{RET}{RET}"))
     }
