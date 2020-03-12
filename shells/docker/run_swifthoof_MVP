@@ -1,0 +1,71 @@
+#!/bin/sh
+/usr/bin/Rscript /repo/workhorse/scripts/R/swifthoof_main.R --Rscript /usr/bin/Rscript \
+    -i . -o /output --datDir /repo/workhorse/dat \
+    --platform=EPIC \
+    --manifest=B4 \
+    --workflows=ind \
+    --lightFootPrint \
+    --writeCalls \
+    --writeSsheet \
+    --sigs_sum_field=avg \
+    --minNegPval=0.02 \
+    --minOobPval=0.1 \
+    --minNegPerc=98 \
+    --minOobPerc=90 \
+    --minDeltaBeta=0.2 \
+    --percisionBeta=4 \
+    --percisionPval=6 \
+    --parallel \
+    --verbosity=3 \
+
+#    --platform=EPIC \
+#    --manifest=B4 \
+
+#    --fresh \
+#    --buildSubDir \
+#    --autoDetect \
+#    --workflows=ind \
+
+#    --loadIdat \
+#    --saveIdat \
+
+#    --loadSsets \
+#    --saveSsets \
+#    --saveRawSset \
+#    --lightFootPrint \
+
+#    --writeSset \
+#    --writeCalls \
+#    --writeSsheet \
+#    --writeAuto \
+
+#    --sigs_sum_field=avg \
+
+#    --minNegPval=0.02 \
+#    --minOobPval=0.1 \
+#    --minNegPerc=98 \
+#    --minOobPerc=90 \
+#    --minDeltaBeta=0.2 \
+#    --percisionBeta=4 \
+#    --percisionPval=6 \
+
+#    --single \
+#    --parallel \
+#    --cluster  \
+
+#    --plotSset \
+#    --plotCalls \
+#    --plotAuto \
+
+#    --plotFormat=png \
+#    --plotFormat=pdf \
+#    --dpi=72 \
+#    --dpi=120 \
+
+#    --plotMax=10000 \
+#    --plotSub=5000 \
+
+#    --verbosity=3 \
+
+
+# End of file
