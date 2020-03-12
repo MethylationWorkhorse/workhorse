@@ -128,8 +128,8 @@ if (args.dat[1]=='RStudio') {
   # Fast Option::
   #
   # opt$DyeSwapNoob <- FALSE
-  # opt$SwapOpen    <- FALSE
-  # opt$writeCall   <- FALSE
+  opt$SwapOpen    <- FALSE
+  opt$writeCall   <- FALSE
   # opt$RawOpen     <- FALSE
   opt$writeAuto  <- FALSE
   opt$plotAuto   <- FALSE
@@ -159,12 +159,18 @@ if (args.dat[1]=='RStudio') {
   opt$expChipNum <- '204275020006' # _R12C02
   opt$idatsDir   <- file.path('/Users/bbarnes/Documents/Projects/workhorse', paste0('idats_',opt$expRunStr), opt$expChipNum)
   
+  opt$expRunStr  <- 'NA12878'
+  opt$expChipNum <- '200348350023'
+  opt$expChipNum <- '200348350002' # R05C01
+  opt$idatsDir   <- file.path('/Users/bbarnes/Documents/Projects/workhorse', paste0('idats_',opt$expRunStr), opt$expChipNum)
+  
   opt$outDir   <- file.path(par$topDir, 'workspace', par$prgmTag, par$runMode, opt$expRunStr)
 
   par$retData <- TRUE
   opt$addBeadCounts <- TRUE
 
   opt$verbosity <- 4
+  opt$verbosity <- 6
   
 } else {
   par$runMode    <- 'CommandLine'
@@ -445,7 +451,8 @@ if (opt$cluster) {
       #                localHub=FALSE)
       
       rdat <- sesamizeSingleSample(prefix=chipPrefixes[[prefix]], man=man_tib, add=add_tib, autoRef=auto_sam_tib, opt=opt, retData=par$retData)
-
+      # rdat2  <- sesamizeSingleSample(prefix=chipPrefixes[[prefix]], man=man_tib, add=add_tib, autoRef=auto_sam_tib, opt=opt, retData=par$retData)
+      
       # rdat$sigs %>% select(Probe_ID, starts_with('Bead'), ends_with('Swap'))
       
       if (opt$single) break

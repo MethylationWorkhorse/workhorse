@@ -27,15 +27,16 @@ sesameStepAbbreviation = function(x, verbose=0,vt=3,tc=1,tt=NULL) {
   return('U')
 }
 
-sesameWorkflow = function(sset=NULL, add, call, sigs, pheno, beadPool=NULL,
+sesameWorkflow = function(sset=NULL, add, call, sigs, swap, pheno, beadPool=NULL,
                           prefix=NULL, platform=NULL, manifest=NULL, # This is only used if sset is not present
                           stepCalls=NULL,
                           negsCalls=NULL,
                           poobCalls=NULL,
                           betaCalls=NULL, 
                           intsCalls=NULL,
-                          fenoCalls=NULL, del='_',
-                          verbose=0,vt=3,tc=1,tt=NULL) {
+                          swapCalls=NULL, 
+                          fenoCalls=NULL, 
+                          del='_', verbose=0,vt=3,tc=1,tt=NULL) {
   funcTag <- 'sesameWorkflow'
   tabsStr <- paste0(rep(TAB, tc), collapse='')
   
@@ -83,15 +84,40 @@ sesameWorkflow = function(sset=NULL, add, call, sigs, pheno, beadPool=NULL,
         call <- call %>% dplyr::left_join(tibble::enframe(beta, name='Probe_ID', value=babr), by="Probe_ID")
       }
       
-      # Make Intesnisty Call::
+      # Make Signal Intesnisty Table::
+      cur_sigs <- NULL
       if (!is.null(intsCalls) && !is.null(intsCalls[ii]) && intsCalls[ii]==TRUE) {
         # iabr <- paste(sabr,'sigs', sep=del)
         iabr <- sabr
-        sigs <- sigs %>% dplyr::left_join(
-          ssetToSigsTib(sset=sset, add=add, name=iabr, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt), 
-          by=c("Probe_ID", "Man_Col", "Design_Type", "Probe_Type") )
+        cur_sigs <- ssetToSigsTib(sset=sset, add=add, name=iabr, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
+        
+        sigs <- sigs %>% dplyr::left_join(cur_sigs, by=c("Probe_ID", "Man_Col", "Design_Type", "Probe_Type") )
       }
       
+      # Record Swapping Changes::
+      if (!is.null(intsCalls) && !is.null(intsCalls[ii]) && intsCalls[ii]==TRUE) {
+        # wabr <- paste(sabr,'swap', sep=del)
+        wabr <- sabr
+
+        # Need to make the signal call before if it wasn't already called::
+        if (is.null(cur_sigs))
+          cur_sigs <- ssetToSigsTib(sset=sset, add=add, name=iabr, verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
+        
+        cat(glue::glue("{RET}{RET}CURRENT SIGS({wabr}){RET}"))
+        print(cur_sigs)
+        
+        # TBD:: Fix the directly indexed field[5] below...
+        cur_swap <- cur_sigs %>% dplyr::filter(Design_Type!='II') %>% 
+          dplyr::filter(.[5]==TRUE) %>% dplyr::select(Probe_ID, Man_Col, Probe_Type, 5)
+        cat(glue::glue("{RET}{RET}CURRENT SWAPS({wabr}){RET}"))
+        print(cur_swap)
+        if (is.null(swap)) {
+          swap <- cur_swap
+        } else {
+          swap <- swap %>% dplyr::full_join(cur_swap, by=c("Probe_ID", "Man_Col", "Probe_Type")) %>% dplyr::distinct()
+        }
+      }
+
       # Make Sesame Inference Calls::
       if (!is.null(fenoCalls) && !is.null(fenoCalls[ii]) && fenoCalls[ii]==TRUE) {
         if (verbose>=vt+1) cat(glue::glue("[{funcTag}]:{tabsStr}{TAB} Calculating Pheno Type Predictions(beadPool={beadPool}).{RET}"))
@@ -142,7 +168,7 @@ sesameWorkflow = function(sset=NULL, add, call, sigs, pheno, beadPool=NULL,
   # list(sset, call, sigs)
   # list(call, sigs, pheno)
   # list(call, sigs, pheno)
-  list(call, sigs, pheno, sset)
+  list(call, sigs, swap, pheno, sset)
 }
 
 initSesameRaw = function(prefix, platform, manifest, verbose=0,vt=3,tc=1,tt=NULL) {

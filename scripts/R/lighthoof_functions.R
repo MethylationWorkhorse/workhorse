@@ -64,6 +64,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     #  - sigs_tib: table by [ Probe_ID,Address,Man_Col,Design_Type,Probe_Type ] -> [ Swap, G, R ] i.e. intensities
     call_tib  <- ses_man_tib %>% dplyr::select(Probe_ID, DESIGN, Probe_Type) %>% dplyr::rename(Design_Type=DESIGN)
     sigs_tib  <- ses_add_tib
+    swap_tib  <- NULL
     
     # Summary and Intermediate Summary Tables::
     #  - samp_sum_tib: complete summary table. i.e. Automatic Sample Sheet
@@ -93,6 +94,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     if (!dir.exists(opt$outDir)) dir.create(opt$outDir, recursive=TRUE)
     call_csv <- file.path(opt$outDir, paste(out_name, 'call.csv.gz', sep=del) )
     sigs_csv <- file.path(opt$outDir, paste(out_name, 'sigs.csv.gz', sep=del) )
+    swap_csv <- file.path(opt$outDir, paste(out_name, 'swap.csv.gz', sep=del) )
     samp_csv <- file.path(opt$outDir, paste(out_name, 'AutoSampleSheet.csv.gz', sep=del) )
     ssum_csv <- file.path(opt$outDir, paste(out_name, 'SignalSummary.csv.gz', sep=del) )
     time_csv <- file.path(opt$outDir, paste(out_name, 'runTime.csv.gz', sep=del) )
@@ -114,15 +116,19 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
       pCalls <- c(FALSE, TRUE,  TRUE)
       bCalls <- c(FALSE, FALSE, TRUE)
       iCalls <- c(FALSE, FALSE, TRUE)
+      wCalls <- c(FALSE, FALSE, TRUE)
       fCalls <- c(TRUE,  TRUE,  TRUE)
       
-      ses_data <- sesameWorkflow(sset=raw_sset, add=add, call=call_tib, sigs=sigs_tib, pheno=phen_sum_tib,
-                                 stepCalls=sCalls, negsCalls=nCalls,poobCalls=pCalls, betaCalls=bCalls, intsCalls=iCalls, fenoCalls=fCalls,
+      ses_data <- sesameWorkflow(sset=raw_sset, add=add, call=call_tib, sigs=sigs_tib,
+                                 swap=swap_tib, pheno=phen_sum_tib, beadPool=beadPool,
+                                 stepCalls=sCalls, negsCalls=nCalls, poobCalls=pCalls,
+                                 betaCalls=bCalls, intsCalls=iCalls, swapCalls=wCalls, fenoCalls=fCalls,
                                  verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tTracker)
       
       call_tib <- ses_data[[1]]
       sigs_tib <- ses_data[[2]]
-      phen_sum_tib <- ses_data[[3]]
+      swap_tib <- ses_data[[3]]
+      phen_sum_tib <- ses_data[[4]]
     }
     
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
@@ -137,15 +143,19 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
       pCalls <- c(TRUE,  FALSE, TRUE)
       bCalls <- c(FALSE, FALSE, TRUE)
       iCalls <- c(FALSE, FALSE, TRUE)
+      wCalls <- c(FALSE, FALSE, TRUE)
       fCalls <- c(TRUE , FALSE, TRUE)
       
-      ses_data <- sesameWorkflow(sset=raw_sset, add=add, call=call_tib, sigs=sigs_tib, pheno=phen_sum_tib,
-                                 stepCalls=sCalls, negsCalls=nCalls,poobCalls=pCalls, betaCalls=bCalls, intsCalls=iCalls, fenoCalls=fCalls,
+      ses_data <- sesameWorkflow(sset=raw_sset, add=add, call=call_tib, sigs=sigs_tib,
+                                 swap=swap_tib, pheno=phen_sum_tib, beadPool=beadPool,
+                                 stepCalls=sCalls, negsCalls=nCalls, poobCalls=pCalls,
+                                 betaCalls=bCalls, intsCalls=iCalls, swapCalls=wCalls, fenoCalls=fCalls,
                                  verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tTracker)
       
       call_tib <- ses_data[[1]]
       sigs_tib <- ses_data[[2]]
-      phen_sum_tib <- ses_data[[3]]
+      swap_tib <- ses_data[[3]]
+      phen_sum_tib <- ses_data[[4]]
     }
     
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
@@ -163,6 +173,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
       pCalls <- c(TRUE,  FALSE, TRUE,  TRUE)
       bCalls <- c(FALSE, FALSE, TRUE,  TRUE)
       iCalls <- c(FALSE, FALSE, FALSE, TRUE)
+      wCalls <- c(TRUE,  FALSE, FALSE, TRUE)
       fCalls <- c(FALSE, FALSE, TRUE,  FALSE)
     } else {
       # NOTES: This is the same as above, but not calculating detection p-values until after backgorund(noob) and
@@ -175,6 +186,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
       pCalls <- c(FALSE, TRUE,  TRUE)
       bCalls <- c(FALSE, TRUE,  TRUE)
       iCalls <- c(FALSE, FALSE, TRUE)
+      wCalls <- c(TRUE,  FALSE, TRUE)
       fCalls <- c(FALSE, TRUE,  FALSE)
     }
     requeue_key  <- paste('CG',core_oo_str,'negs_pval_PassPerc', sep=del)
@@ -182,15 +194,25 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     core_oo_negs <- paste(core_oo_str,'negs','pval',sep=del)
     core_oo_poob <- paste(core_oo_str,'poob','pval',sep=del)
     
-    ses_data <- sesameWorkflow(sset=raw_sset, add=add, call=call_tib, sigs=sigs_tib, pheno=phen_sum_tib, beadPool=beadPool,
-                               stepCalls=sCalls, negsCalls=nCalls,poobCalls=pCalls, betaCalls=bCalls, intsCalls=iCalls, fenoCalls=fCalls,
+    ses_data <- sesameWorkflow(sset=raw_sset, add=add, call=call_tib, sigs=sigs_tib,
+                               swap=swap_tib, pheno=phen_sum_tib, beadPool=beadPool,
+                               stepCalls=sCalls, negsCalls=nCalls, poobCalls=pCalls,
+                               betaCalls=bCalls, intsCalls=iCalls, swapCalls=wCalls, fenoCalls=fCalls,
                                verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tTracker)
     
     call_tib <- ses_data[[1]]
     sigs_tib <- ses_data[[2]]
-    phen_sum_tib <- ses_data[[3]]
-    sset_ret <- ses_data[[4]] # For Development Mode...
+    swap_tib <- ses_data[[3]]
+    phen_sum_tib <- ses_data[[4]]
+    sset_ret <- ses_data[[5]] # For Development Mode...
     
+    # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
+    #           Test a single path with SSETs Emitted at each step::
+    # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
+    if (TRUE) {
+      # This should just work off an sset...
+    }
+
     if (opt$addBeadCounts) {
       cat(glue::glue("[{funcTag}]:{tabsStr}: Adding Bead Counts to Signal Tibs...{RET}"))
       sigs_tib <- idat$sig %>% dplyr::inner_join(sigs_tib, by='Address') %>%
@@ -211,6 +233,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     samp_sum_tib <- samp_sum_tib %>% dplyr::bind_cols(phen_sum_tib)
     samp_sum_tib <- samp_sum_tib %>% add_column(minPvalUsed = opt$minPval)
     samp_sum_tib <- samp_sum_tib %>% add_column(minDeltaUsed = opt$minDelta)
+    # TBD: Seems like the right spot to add swapping counts...
     
     # ----- ----- ----- ----- ----- -----|----- ----- ----- ----- ----- ----- #
     #                           Auto-Detect Sample::
@@ -220,7 +243,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
       
       auto_data <- sampleDetect(can=call_tib, ref=autoRef, minPval=opt$minPval, minDelta=opt$minDelta,
                                 dname='Design_Type', pname='Probe_Type', ptype='cg',
-                                join='Probe_ID', field=core_oo_beta, pval=core_oo_negs, suffix='beta', del=del,
+                                jval='Probe_ID', field=core_oo_beta, pval=core_oo_negs, suffix='beta', del=del,
                                 outDir=opt$outDir, sname=out_name, plotMatrix=opt$plotAuto, writeMatrix=opt$writeAuto,
                                 dpi=opt$dpi, format=opt$plotFormat, datIdx=4,
                                 verbose=opt$verbosity,vt=vt+1,tc=tc+1,tt=tTracker)
@@ -309,21 +332,21 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     if (!is.null(roundData)) {
       if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Rounding output variabiles to {roundData}.{RET}"))
       call_tib     <- call_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(purrr::is_double, round, roundData)
-      if (opt$verbosity>=vt+1) print(call_tib)
+      if (opt$verbosity>=vt+2) print(call_tib)
       sigs_tib     <- sigs_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(purrr::is_double, round, roundData)
-      if (opt$verbosity>=vt+1) print(sigs_tib)
+      if (opt$verbosity>=vt+3) print(sigs_tib)
       
-      if (opt$verbosity>=vt+1) cat(glue::glue("[{funcTag}]:{tabsStr} Printing samp_sum_tib.{RET}"))
+      if (opt$verbosity>=vt+2) cat(glue::glue("[{funcTag}]:{tabsStr} Printing samp_sum_tib.{RET}"))
       samp_sum_tib <- samp_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(base::is.numeric, round, roundData)
-      if (opt$verbosity>=vt+1) print(samp_sum_tib)
+      if (opt$verbosity>=vt+3) print(samp_sum_tib)
       
-      if (opt$verbosity>=vt+1) cat(glue::glue("[{funcTag}]:{tabsStr} Printing sigs_sum_tib{RET}"))
+      if (opt$verbosity>=vt+2) cat(glue::glue("[{funcTag}]:{tabsStr} Printing sigs_sum_tib{RET}"))
       sigs_sum_tib <- sigs_sum_tib %>% dplyr::ungroup() %>% dplyr::mutate_if(base::is.numeric, round, roundData)
-      if (opt$verbosity>=vt+1) print(sigs_sum_tib)
+      if (opt$verbosity>=vt+3) print(sigs_sum_tib)
       
-      if (opt$verbosity>=vt+1) cat(glue::glue("[{funcTag}]:{tabsStr} Printing time_data{RET}"))
+      if (opt$verbosity>=vt+2) cat(glue::glue("[{funcTag}]:{tabsStr} Printing time_data{RET}"))
       time_data    <- time_data %>% dplyr::ungroup() %>% dplyr::mutate_if(base::is.numeric, round, roundData)
-      if (opt$verbosity>=vt+1) print(time_data)
+      if (opt$verbosity>=vt+3) print(time_data)
       if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Done rounding output variabiles to {roundData}.{RET}{RET}"))
     } else {
       if (opt$verbosity>=vt) cat(glue::glue("[{funcTag}]:{tabsStr} Will NOT round output variabiles.{RET}{RET}"))
@@ -348,6 +371,7 @@ sesamizeSingleSample = function(prefix, man, add, autoRef, opt, retData=FALSE, d
     
     ret$call   <- call_tib
     ret$sigs   <- sigs_tib
+    ret$swap   <- swap_tib
     
     ret$samSum  <- samp_sum_tib
     ret$sigSum  <- sigs_sum_tib
@@ -1076,7 +1100,7 @@ rsquaredMatrix = function(mat, verbose=0,vt=3,tc=1,tt=NULL) {
 }
 
 sampleDetect = function(can, ref, minPval, minDelta, dname, pname, ptype=NULL,
-                        join, pval, field, suffix, del='_',
+                        jval, pval, field, suffix, del='_',
                         outDir=NULL, sname=NULL, plotMatrix=FALSE, writeMatrix=FALSE,
                         dpi=120, format='png', datIdx=4, roundData=TRUE,
                         verbose=0,vt=4,tc=1,tt=NULL) {
@@ -1087,8 +1111,16 @@ sampleDetect = function(can, ref, minPval, minDelta, dname, pname, ptype=NULL,
   stime <- system.time({
     sss <- NULL
     
+    # String Values::
+    jval_char <- jval
+    
     dname <- dname %>% rlang::sym()
     pname <- pname %>% rlang::sym()
+
+    # Sym jval to see if it fixes the warning...
+    field <- field %>% rlang::sym()
+    jval  <- jval %>% rlang::sym()
+    pval  <- pval %>% rlang::sym()
     
     if (!is.null(outDir) && !dir.exists(outDir)) dir.create(outDir, recursive=TRUE)
     
@@ -1101,9 +1133,20 @@ sampleDetect = function(can, ref, minPval, minDelta, dname, pname, ptype=NULL,
     can_nrows <- base::nrow(can)
     if (verbose>=vt) cat(glue::glue("[{funcTag}]:{tabsStr}{TAB} can_nrows={can_nrows}.{RET}"))
     
-    tib <- can %>% dplyr::select(join,!!dname,!!pname,pval,field) %>%
-      purrr::set_names(join,dname,pname, 'Sample_pval','Sample_beta') %>%
-      dplyr::left_join(ref, by=join)
+    if (verbose>=vt+2) {
+      cat(glue::glue("[{funcTag}]:{tabsStr}{TAB} Pre-join. dname={dname}, pname={pname}, pval={pval}, field={field}, jval={jval}.{RET}"))
+      cat(glue::glue("[{funcTag}]:{tabsStr}{TAB} ref=={RET}"))
+      print(ref)
+      cat("\n\ntib1==\n")
+      tib <- can %>% dplyr::select(!!jval,!!dname,!!pname,!!pval,!!field) %>% print()
+      cat("\n\ntib2==\n")
+      tib <- can %>% dplyr::select(!!jval,!!dname,!!pname,!!pval,!!field) %>%
+        purrr::set_names(jval,dname,pname, 'Sample_pval','Sample_beta') %>% print()
+      cat("\n\n")
+    }
+    tib <- can %>% dplyr::select(!!jval,!!dname,!!pname,!!pval,!!field) %>%
+      purrr::set_names(jval,dname,pname, 'Sample_pval','Sample_beta') %>%
+      dplyr::left_join(ref, by=jval_char)
     if (verbose>=vt+2) cat(glue::glue("[{funcTag}]:{tabsStr}{TAB} Joined.{RET}"))
     
     # 3. Filter on P-value
@@ -1111,7 +1154,7 @@ sampleDetect = function(can, ref, minPval, minDelta, dname, pname, ptype=NULL,
                     verbose=verbose,vt=vt+1,tc=tc+1,tt=tt)
     
     # 4. Build matrix
-    mat <- tib %>% dplyr::select(-c(join,!!dname,!!pname)) %>%
+    mat <- tib %>% dplyr::select(-c(!!jval,!!dname,!!pname)) %>%
       dplyr::select(ends_with(paste0(del,suffix)) ) %>% as.matrix()
     
     # 5. Plot Matrix

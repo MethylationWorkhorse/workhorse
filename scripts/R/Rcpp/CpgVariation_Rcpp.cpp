@@ -128,14 +128,420 @@ NumericMatrix na_matrix(int n, int m){
  *     
  */
 
+/*
+ * Under Construction:: NonNan Single/Cross Sample Loci Variation/Concordance
+ *      a.	Full data set r-squared (3T+6C+8T)
+ *            i.	Q2,Q1-Q3,Avg, All???
+ *            ii.	Return transpose (min Q2, Q1-Q4, 3)
+ *      b.	Single Sample:
+ *            i.	Q1,Q2,Q3,Avg,Sd, -Count
+ *      c.	Cross Sample:
+ *
+ */
 // [[Rcpp::export]]
-NumericMatrix C_lociRSquared(NumericMatrix x, NumericVector idxVec, CharacterVector samVec, 
-                             Nullable<CharacterVector> cpgVec=R_NilValue, 
-                             double minDelta2=0.2, double minDelta1=0.1, double minDelta0=0.05,
-                             int verbose=0, int vt=1) {
+NumericMatrix C_noNA_LociVariation(NumericMatrix x, NumericVector idxVec, CharacterVector samVec, NumericVector difVec,
+                                   Nullable<CharacterVector> cpgVec=R_NilValue,
+                                   double minDelta2=2.0, double minDelta1=4.0, double minDelta0=8.0,
+                                   int verbose=1, int vt=1) {
+  int dat_nrow = x.nrow(), dat_ncol = x.ncol();
+  int out_nrows = 13;
+  int sam_ncols = idxVec.size();
+  
+  // Initialize Numeric Output Matrix
+  // NumericMatrix out_mat(dat_nrow, (out_nrows*sam_ncols)+1);
+  NumericMatrix out_mat = na_matrix(dat_nrow, (out_nrows*(sam_ncols-1)));  // EDT:: TBD:: Reduce columns by - 1 sample and removed the ending +1 for r2
+  vector<string> out_cols_vec;
+  // out_cols_vec.push_back("RSquared"); // EDIT:: Removing r-squared for this plot
+  
+  if (verbose>=vt) Rcout << "Matrix Dim: nrow=" << dat_nrow << ", ncol=" << dat_ncol << "\n";
+  int sampleCnt = idxVec.size();
+  
+  for (int loci_idx = 0; loci_idx < dat_nrow; loci_idx++) {
+    vector<double> all_x_vec;   // Pair wise first value 
+    vector<double> all_y_vec;   // Pair wise second value
+    
+    /*
+     * Per Loci Workflow::
+     * 
+     *   Per Sample Stack::
+     *   
+     *     1. Build sample_vec
+     *        - vector<double> sample_vec;
+     *     2. Sort sample_vec
+     *        - sort(sample_vec.begin(), sample_vec.end());
+     *     3. Sample Stats::
+     *        - avg,sd,Q1,Q2,Q3,  range?, min?, max?
+     *     4. Build n choose m pair of vectors
+     *        - comb_x_vec, comb_y_vec
+     *        - for m { for n=m+1 }
+     *        
+     */
+    
+    int col_int_idx = 0; // Column Intialization Index
+    for (int sIdx = 0; sIdx < sampleCnt-1; sIdx++) {       // EDIT:: Terminate at: sampleCnt-1 instead of sampleCnt
+      int col_beg_idxA = col_int_idx;                      // EDIT:: We now need two col_beg/col_ends (A)
+      int col_end_idxA = col_beg_idxA + idxVec[sIdx];
+      
+      int col_beg_idxB = col_end_idxA;                     // EDIT:: We now need two col_beg/col_ends (B) ??? Should this init to col_end_idxA ???
+      int col_end_idxB = col_beg_idxB + idxVec[sIdx+1];
+      
+      string sampleName = (string)samVec[sIdx];
+      string nextSample = (string)samVec[sIdx+1];      // EDIT:: Add the next sample name and combine them::
+      string combSample = nextSample+"-"+sampleName;   // EDIT:: Reverse order since we don't use absolute value, but absolute difference
+      double targetDiff = difVec[sIdx];                // EDIT:: Adding target difference for each sequential comparison
+      double bufDelta2  = targetDiff/minDelta2;    // EDIT:: Use minDelta's as a percent of the size of the difference for different
+      double bufDelta1  = targetDiff/minDelta1;    //          expected sample seperations, instead of a fix beta buffer (0.1, 0.5, 0.01)
+      double bufDelta0  = targetDiff/minDelta0;
+      
+      vector<double> val_vec;  // The actual values (no NA's)
+      vector<double> dbv_vec;  // The delta betas (no NA's)
+      
+      int tot_cnt = 0;
+      int nan_cnt = 0;
+      int cmp_cnt = 0;
+      
+      int db2_cnt = 0;
+      int db1_cnt = 0;
+      int db0_cnt = 0;
+      
+      if (verbose>=vt) {
+        Rcout << "loci(A)=" << loci_idx << ", sIdx=" << sIdx << "/" << sIdx+1 << 
+          ", sample/next=" << sampleName << "/" << nextSample << 
+            ", beg/end(A)=" << col_beg_idxA << "/" << col_end_idxA << 
+              ", beg/end(B)=" << col_beg_idxB << "/" << col_end_idxB << 
+                ", tot_cnt=" << tot_cnt << ", nan_cnt=" << nan_cnt << ", cmp_cnt=" << cmp_cnt << ", tarDif=" << targetDiff << """\n";
+      }
+      for (int col_idxA = col_beg_idxA; col_idxA < col_end_idxA; col_idxA++) {
+        tot_cnt++;
+        if (NumericMatrix::is_na(x(loci_idx,col_idxA))) {
+          nan_cnt++;
+        } else {
+          val_vec.push_back(x(loci_idx,col_idxA)); // EDIT:: Will probably want val_vecA and val_vecB or may none at all???
+        }
+        
+        // EDIT:: Remove Nesting of both loops! Maybe NOT...
+        // EDIT:: Now I beleive we want to loop over the next group::
+        // OLD CODE: for (int col_idxB = col_idxA+1; col_idxB < col_end_idx; col_idxB++) {
+        for (int col_idxB = col_beg_idxB; col_idxB < col_end_idxB; col_idxB++) {
+          
+          if (NumericMatrix::is_na(x(loci_idx,col_idxA))) {
+          } else if (NumericMatrix::is_na(x(loci_idx,col_idxB))) {
+          } else {
+            cmp_cnt++;
+            
+            double valA = x(loci_idx, col_idxA);
+            double valB = x(loci_idx, col_idxB);
+            
+            // double db = fabs( valA - valB );
+            double db = valB - valA; // EDIT:: Reverse order since we don't use absolute value, but absolute difference
+            dbv_vec.push_back(db);
+            
+            // Now we need to get a range around the target difference...
+            if (fabs(targetDiff-db) > bufDelta2) db2_cnt++;
+            if (fabs(targetDiff-db) > bufDelta1) db1_cnt++;
+            if (fabs(targetDiff-db) > bufDelta0) db0_cnt++;
+            
+            all_x_vec.push_back(valA);
+            all_y_vec.push_back(valB);
+            
+            if (verbose>=vt+1)
+              Rcout << "\tidxA/idxB=" << col_idxA << "/" << col_idxB << ", db=" << db << ", valA=" << valA << ", valB=" << valB << "\n";
+          }
+        }
+      }
+      if (verbose>=vt) {
+        Rcout << "loci(A)=" << loci_idx << ", sIdx=" << sIdx << "/" << sIdx+1 << 
+          ", sample=" << sampleName << ", beg/end(A)=" << col_beg_idxA << "/" << col_end_idxA << 
+            ", beg/end(B)=" << col_beg_idxB << "/" << col_end_idxB << 
+              ", tot_cnt=" << tot_cnt << ", nan_cnt=" << nan_cnt << ", cmp_cnt=" << cmp_cnt << "\n\n";
+      }
+      
+      // Calculate value(mean, median, and SD)
+      double val_avg = NA_REAL;
+      double val_med = NA_REAL;
+      double val_std = NA_REAL;
+      if (val_vec.size() != 0) {
+        val_avg = mean(val_vec);
+        val_med = findMedian(&val_vec[0], val_vec.size());
+        val_std = stdev(val_vec);
+      }
+      
+      // Add delta-value(Mean, Median and SD)
+      double dbv_avg = NA_REAL;
+      double dbv_med = NA_REAL;
+      double dbv_std = NA_REAL;
+      
+      if (dbv_vec.size() != 0) {
+        dbv_avg = mean(dbv_vec);
+        dbv_med = findMedian(&dbv_vec[0], dbv_vec.size());
+        dbv_std = stdev(dbv_vec);
+      }
+      
+      // EDIT:: Removing r-squared
+      double r2 = 0;
+      if (all_x_vec.size() > 1) r2 = pearsoncoeff(all_x_vec, all_y_vec);
+      if (verbose>=vt) Rcout << "\tR2=" << r2 << ", out_cols_len" << out_cols_vec.size() << "\n";
+
+      // Total, NA, Comparison Counts::
+      int out_idx = sIdx*out_nrows;
+      out_mat(loci_idx,out_idx++) = tot_cnt;
+      out_mat(loci_idx,out_idx++) = nan_cnt;
+      
+      // Value(Beta) Average, Median, SD::
+      out_mat(loci_idx,out_idx++) = val_avg;
+      out_mat(loci_idx,out_idx++) = val_med;
+      out_mat(loci_idx,out_idx++) = val_std;
+      
+      // Delta-Beta Counts::
+      out_mat(loci_idx,out_idx++) = db2_cnt;
+      out_mat(loci_idx,out_idx++) = db1_cnt;
+      out_mat(loci_idx,out_idx++) = db0_cnt;
+      out_mat(loci_idx,out_idx++) = cmp_cnt;
+      
+      // Delta Beta Average, Median, SD::
+      out_mat(loci_idx,out_idx++) = dbv_avg;
+      out_mat(loci_idx,out_idx++) = dbv_med;
+      out_mat(loci_idx,out_idx++) = dbv_std;
+      out_mat(loci_idx,out_idx++) = r2;
+      
+      if (loci_idx==0) {
+        // EDIT:: Replace sampleName with combSample
+        out_cols_vec.push_back(sampleName+"_Tot_Count");
+        out_cols_vec.push_back(sampleName+"_Nan_Count");
+        
+        out_cols_vec.push_back(sampleName+"_avg");
+        out_cols_vec.push_back(sampleName+"_med");
+        out_cols_vec.push_back(sampleName+"_sd");
+        
+        out_cols_vec.push_back(combSample+"_db2_Count");
+        out_cols_vec.push_back(combSample+"_db1_Count");
+        out_cols_vec.push_back(combSample+"_db0_Count");
+        out_cols_vec.push_back(combSample+"_Cmp_Count");
+        
+        out_cols_vec.push_back(combSample+"_db_avg");
+        out_cols_vec.push_back(combSample+"_db_med");
+        out_cols_vec.push_back(combSample+"_db_sd");
+        out_cols_vec.push_back(combSample+"_r2");
+      }
+      
+      col_int_idx = col_end_idxA;
+    }
+  }
+  colnames(out_mat) = wrap(out_cols_vec);
+  rownames(out_mat) = rownames(x);
+  // if (cpgVec.isNotNull()) rownames(out_mat) = cpgVec;
+  
+  return out_mat;
+}
+
+
+/*
+ * Fully Functional:: Provides cross-sample stats. This is mostly used for titration studies.
+ *   - [Done] Replace absolute value with difference
+ *   - [Done] Provide an input vector with desired difference for each comparison
+ *   - [Done, but should be Removed] R-squared per transition. This doesn't make sense
+ *   - Remove redundant uneeded fields
+ */
+// [[Rcpp::export]]
+NumericMatrix C_crossSampleLociVariation(NumericMatrix x, NumericVector idxVec, CharacterVector samVec, NumericVector difVec,
+                                         Nullable<CharacterVector> cpgVec=R_NilValue,
+                                         double minDelta2=2.0, double minDelta1=4.0, double minDelta0=8.0,
+                                         int verbose=1, int vt=1) {
+  int dat_nrow = x.nrow(), dat_ncol = x.ncol();
+  int out_nrows = 13;
+  int sam_ncols = idxVec.size();
+  
+  // TBD:: Replace NA check with actual pval cutoff
+  // TBD:: Add back r-squared for each sample pair comparison!!!
+  // TBD:: Use fprintf to get lower percision (maybe not here, maybe in R)
+  
+  // Initialize Numeric Output Matrix
+  // NumericMatrix out_mat(dat_nrow, (out_nrows*sam_ncols)+1);
+  NumericMatrix out_mat = na_matrix(dat_nrow, (out_nrows*(sam_ncols-1)));  // EDT:: TBD:: Reduce columns by - 1 sample and removed the ending +1 for r2
+  vector<string> out_cols_vec;
+  // out_cols_vec.push_back("RSquared"); // EDIT:: Removing r-squared for this plot
+  
+  if (verbose>=vt) Rcout << "Matrix Dim: nrow=" << dat_nrow << ", ncol=" << dat_ncol << "\n";
+  int sampleCnt = idxVec.size();
+  
+  for (int loci_idx = 0; loci_idx < dat_nrow; loci_idx++) {
+    vector<double> x_vec;   // Pair wise first value (no NA's)
+    vector<double> y_vec;   // Pair wise second value (no NA's)
+    
+    int col_int_idx = 0; // Column Intialization Index
+    for (int sIdx = 0; sIdx < sampleCnt-1; sIdx++) {       // EDIT:: Terminate at: sampleCnt-1 instead of sampleCnt
+      int col_beg_idxA = col_int_idx;                      // EDIT:: We now need two col_beg/col_ends (A)
+      int col_end_idxA = col_beg_idxA + idxVec[sIdx];
+      
+      int col_beg_idxB = col_end_idxA;                     // EDIT:: We now need two col_beg/col_ends (B) ??? Should this init to col_end_idxA ???
+      int col_end_idxB = col_beg_idxB + idxVec[sIdx+1];
+      
+      string sampleName = (string)samVec[sIdx];
+      string nextSample = (string)samVec[sIdx+1];      // EDIT:: Add the next sample name and combine them::
+      string combSample = nextSample+"-"+sampleName;   // EDIT:: Reverse order since we don't use absolute value, but absolute difference
+      double targetDiff = difVec[sIdx];                // EDIT:: Adding target difference for each sequential comparison
+      double bufDelta2  = targetDiff/minDelta2;    // EDIT:: Use minDelta's as a percent of the size of the difference for different
+      double bufDelta1  = targetDiff/minDelta1;    //          expected sample seperations, instead of a fix beta buffer (0.1, 0.5, 0.01)
+      double bufDelta0  = targetDiff/minDelta0;
+      
+      vector<double> val_vec;  // The actual values (no NA's)
+      vector<double> dbv_vec;  // The delta betas (no NA's)
+      
+      int tot_cnt = 0;
+      int nan_cnt = 0;
+      int cmp_cnt = 0;
+      
+      int db2_cnt = 0;
+      int db1_cnt = 0;
+      int db0_cnt = 0;
+      
+      if (verbose>=vt) {
+        Rcout << "loci(A)=" << loci_idx << ", sIdx=" << sIdx << "/" << sIdx+1 << 
+          ", sample/next=" << sampleName << "/" << nextSample << 
+            ", beg/end(A)=" << col_beg_idxA << "/" << col_end_idxA << 
+              ", beg/end(B)=" << col_beg_idxB << "/" << col_end_idxB << 
+                ", tot_cnt=" << tot_cnt << ", nan_cnt=" << nan_cnt << ", cmp_cnt=" << cmp_cnt << ", tarDif=" << targetDiff << """\n";
+      }
+      for (int col_idxA = col_beg_idxA; col_idxA < col_end_idxA; col_idxA++) {
+        tot_cnt++;
+        if (NumericMatrix::is_na(x(loci_idx,col_idxA))) {
+          nan_cnt++;
+        } else {
+          val_vec.push_back(x(loci_idx,col_idxA)); // EDIT:: Will probably want val_vecA and val_vecB or may none at all???
+        }
+        
+        // EDIT:: Remove Nesting of both loops! Maybe NOT...
+        // EDIT:: Now I beleive we want to loop over the next group::
+        // OLD CODE: for (int col_idxB = col_idxA+1; col_idxB < col_end_idx; col_idxB++) {
+        for (int col_idxB = col_beg_idxB; col_idxB < col_end_idxB; col_idxB++) {
+          
+          if (NumericMatrix::is_na(x(loci_idx,col_idxA))) {
+          } else if (NumericMatrix::is_na(x(loci_idx,col_idxB))) {
+          } else {
+            cmp_cnt++;
+            
+            double valA = x(loci_idx, col_idxA);
+            double valB = x(loci_idx, col_idxB);
+            
+            // double db = fabs( valA - valB );
+            double db = valB - valA; // EDIT:: Reverse order since we don't use absolute value, but absolute difference
+            dbv_vec.push_back(db);
+            
+            // Now we need to get a range around the target difference...
+            if (fabs(targetDiff-db) > bufDelta2) db2_cnt++;
+            if (fabs(targetDiff-db) > bufDelta1) db1_cnt++;
+            if (fabs(targetDiff-db) > bufDelta0) db0_cnt++;
+            
+            x_vec.push_back(valA);
+            y_vec.push_back(valB);
+            
+            if (verbose>=vt+1)
+              Rcout << "\tidxA/idxB=" << col_idxA << "/" << col_idxB << ", db=" << db << ", valA=" << valA << ", valB=" << valB << "\n";
+          }
+        }
+      }
+      if (verbose>=vt) {
+        Rcout << "loci(A)=" << loci_idx << ", sIdx=" << sIdx << "/" << sIdx+1 << 
+          ", sample=" << sampleName << ", beg/end(A)=" << col_beg_idxA << "/" << col_end_idxA << 
+            ", beg/end(B)=" << col_beg_idxB << "/" << col_end_idxB << 
+              ", tot_cnt=" << tot_cnt << ", nan_cnt=" << nan_cnt << ", cmp_cnt=" << cmp_cnt << "\n\n";
+      }
+      
+      // Calculate value(mean, median, and SD)
+      double val_avg = NA_REAL;
+      double val_med = NA_REAL;
+      double val_std = NA_REAL;
+      if (val_vec.size() != 0) {
+        val_avg = mean(val_vec);
+        val_med = findMedian(&val_vec[0], val_vec.size());
+        val_std = stdev(val_vec);
+      }
+      
+      // Add delta-value(Mean, Median and SD)
+      double dbv_avg = NA_REAL;
+      double dbv_med = NA_REAL;
+      double dbv_std = NA_REAL;
+      
+      if (dbv_vec.size() != 0) {
+        dbv_avg = mean(dbv_vec);
+        dbv_med = findMedian(&dbv_vec[0], dbv_vec.size());
+        dbv_std = stdev(dbv_vec);
+      }
+      
+      // EDIT:: Removing r-squared
+      double r2 = 0;
+      if (x_vec.size() > 1) r2 = pearsoncoeff(x_vec, y_vec);
+      if (verbose>=vt) Rcout << "\tR2=" << r2 << ", out_cols_len" << out_cols_vec.size() << "\n";
+      
+      // Total, NA, Comparison Counts::
+      int out_idx = sIdx*out_nrows;
+      out_mat(loci_idx,out_idx++) = tot_cnt;
+      out_mat(loci_idx,out_idx++) = nan_cnt;
+      
+      // Value(Beta) Average, Median, SD::
+      out_mat(loci_idx,out_idx++) = val_avg;
+      out_mat(loci_idx,out_idx++) = val_med;
+      out_mat(loci_idx,out_idx++) = val_std;
+      
+      // Delta-Beta Counts::
+      out_mat(loci_idx,out_idx++) = db2_cnt;
+      out_mat(loci_idx,out_idx++) = db1_cnt;
+      out_mat(loci_idx,out_idx++) = db0_cnt;
+      out_mat(loci_idx,out_idx++) = cmp_cnt;
+      
+      // Delta Beta Average, Median, SD::
+      out_mat(loci_idx,out_idx++) = dbv_avg;
+      out_mat(loci_idx,out_idx++) = dbv_med;
+      out_mat(loci_idx,out_idx++) = dbv_std;
+      out_mat(loci_idx,out_idx++) = r2;
+      
+      if (loci_idx==0) {
+        // EDIT:: Replace sampleName with combSample
+        out_cols_vec.push_back(sampleName+"_Tot_Count");
+        out_cols_vec.push_back(sampleName+"_Nan_Count");
+        
+        out_cols_vec.push_back(sampleName+"_avg");
+        out_cols_vec.push_back(sampleName+"_med");
+        out_cols_vec.push_back(sampleName+"_sd");
+        
+        out_cols_vec.push_back(combSample+"_db2_Count");
+        out_cols_vec.push_back(combSample+"_db1_Count");
+        out_cols_vec.push_back(combSample+"_db0_Count");
+        out_cols_vec.push_back(combSample+"_Cmp_Count");
+        
+        out_cols_vec.push_back(combSample+"_db_avg");
+        out_cols_vec.push_back(combSample+"_db_med");
+        out_cols_vec.push_back(combSample+"_db_sd");
+        out_cols_vec.push_back(combSample+"_r2");
+      }
+      
+      col_int_idx = col_end_idxA;
+    }
+  }
+  colnames(out_mat) = wrap(out_cols_vec);
+  rownames(out_mat) = rownames(x);
+  // if (cpgVec.isNotNull()) rownames(out_mat) = cpgVec;
+  
+  return out_mat;
+}
+
+/*
+ * Fullly Functional:: Provides single sample stats. Allows for multiple sample input, but
+ *   results are reported on a per-sample basis. No cross sample communication.
+ *   
+ * Old Name:: C_lociRSquared() Bad name doesn't actually calculate any r-squared. 
+ * R-Function:: getLociSampleSummary() Name change has been updated in R-Function.
+ */
+// [[Rcpp::export]]
+NumericMatrix C_singleSampleLociVariation(NumericMatrix x, NumericVector idxVec, CharacterVector samVec, 
+                                          Nullable<CharacterVector> cpgVec=R_NilValue, 
+                                          double minDelta2=0.2, double minDelta1=0.1, double minDelta0=0.05,
+                                          int verbose=0, int vt=1) {
   int dat_nrow = x.nrow(), dat_ncol = x.ncol();
   int out_nrows = 12;
   int sam_ncols = idxVec.size();
+  
+  // TBD:: Replace NA check with actual pval cutoff
   
   // Initialize Numeric Output Matrix
   // NumericMatrix out_mat(dat_nrow, (out_nrows*sam_ncols)+1);
